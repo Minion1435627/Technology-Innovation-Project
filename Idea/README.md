@@ -1,22 +1,24 @@
-
 # Community Help Platform for Urban Students
+
+**Course:** INFO 90010 — Technology Innovation Project
+**Due:** 16/03/2026 (Proposal)
+
+---
 
 ## Project Overview
 
-Modern cities such as Melbourne can sometimes feel like a **concrete jungle**, where people live close to each other physically but remain socially disconnected. Many urban residents—especially **international students and young professionals**—do not know their neighbors and lack a local support network.
+Modern cities such as Melbourne can sometimes feel like a **concrete jungle**, where people live close to each other physically but remain socially disconnected. Many urban residents — especially **international students and young professionals** — do not know their neighbours and lack a local support network.
 
-At the same time, many small everyday problems occur that are **too minor to justify buying new items or hiring professional services**, yet they can still cause inconvenience.
+At the same time, many small everyday problems occur that are **too minor to justify buying new items or hiring professional services**, yet they can still cause real inconvenience.
 
 Examples include:
 
-- needing a screwdriver to assemble new furniture  
-- needing help carrying heavy objects upstairs  
-- having extra cooked food that would otherwise go to waste  
-- needing to borrow small household items for a short time  
+- needing a screwdriver to assemble new furniture
+- needing help carrying heavy objects upstairs
+- having extra cooked food that would otherwise go to waste
+- needing to borrow small household items for a short time
 
-These problems happen frequently, but they are often solved inefficiently.
-
-This project proposes a **map-based community platform** (available as both a **website and mobile application**) that allows nearby users to **request help, offer resources, and build local social connections**.
+This project proposes a **map-based community platform** (web application) that allows nearby users to **request help, offer resources, and build local social connections**.
 
 ### Core Idea
 
@@ -26,447 +28,248 @@ The platform aims to transform anonymous urban environments into **small support
 
 ---
 
-# Problem Statement
+## Problem Statement
 
 Urban students face three major challenges.
 
-## 1. Resource Inefficiency
+### 1. Resource Inefficiency
 
-People frequently buy tools or items that are rarely used.
+People frequently buy tools or items that are rarely used — screwdrivers, ladders, kitchen tools, moving equipment. Many are used only once or twice but still require purchase, leading to **wasted money and unnecessary consumption**.
 
-Examples include:
+### 2. Lack of Local Support
 
-- screwdrivers  
-- ladders  
-- kitchen tools  
-- moving equipment  
+International students and newcomers often do not have nearby people to rely on. Unlike living with family or long-term communities, many students live alone or in temporary accommodation. Even **small tasks can become difficult without help**.
 
-Many of these items are only used once or twice but still require purchase.
+### 3. Small Tasks Are Inconvenient to Solve
 
-This leads to **wasted money and unnecessary consumption**.
+Some problems are too small to hire someone for, but still difficult to solve alone — moving furniture, borrowing tools, short-term item usage, quick technical help, sharing leftover food. Existing platforms usually focus on **buying, selling, or professional services**, not **micro-help between neighbours**.
 
 ---
 
-## 2. Lack of Local Support
-
-International students and newcomers often do not have nearby people to rely on.
-
-Unlike living with family or long-term communities, many students live alone or in temporary accommodation.
-
-Even **small tasks can become difficult without help**.
-
----
-
-## 3. Small Tasks Are Inconvenient
-
-Some problems are too small to hire someone for, but still difficult to solve alone.
-
-Examples include:
-
-- moving furniture  
-- borrowing tools  
-- short-term item usage  
-- quick technical help  
-- sharing leftover food  
-
-Existing platforms usually focus on **buying, selling, or professional services**, not **micro-help between neighbors**.
-
----
-
-# Core Value Proposition
+## Core Value Proposition
 
 Our platform creates a **local assistance network** where users can:
 
-- ask nearby people for small help  
-- share resources within walking distance  
-- build trusted local relationships  
+- ask nearby people for small help
+- share resources within walking distance
+- build trusted local relationships
 
-The platform encourages community support through **visibility, communication, and reward mechanisms**.
-
-The goal is to make helping neighbors **easy, fast, and socially rewarding**.
+The platform encourages community support through **visibility, communication, and reward mechanisms**, making helping neighbours **easy, fast, and socially rewarding**.
 
 ---
 
-# Platform Structure
+## Tech Stack
 
-The platform includes two main interaction pages.
+| Layer | Decision |
+|---|---|
+| Frontend | React (web) |
+| Backend | Node.js + Express |
+| Database | PostgreSQL |
+| Maps | Google Maps API |
+| Auth | Email/password + Google OAuth + Phone OTP |
+| Real-time Chat | WebSockets (Socket.io) |
+
+---
+
+## Application Structure
+
+### Main Page Layout
+
+```
+┌─────────────────────────────────────┐
+│  🔍 Search    [Filter ▼]    [+ Post] │
+│                                     │
+│   🗺️  MAP  (full screen)             │
+│   🔴 Need Help                       │
+│   🟢 Supply / Offering               │
+│   🔵 Friends Nearby / Top Helper     │
+│   🟡 My Location (current user)      │
+│   ⭐ Short Walking Distance radius   │
+│                                     │
+│  [ Needs ] [ Supply ] [ Chat ] [ Profile ] │
+└─────────────────────────────────────┘
+```
+
+**Bottom navigation tabs:** Needs | Supply | Chat | Profile
+
+---
+
+## Map Interface
+
+The map is the **central interface** of the platform. When users open the app they see a neighbourhood map displaying nearby activity.
+
+### Map Markers
+
+| Marker | Meaning |
+|---|---|
+| 🔴 Red | Need Help posts |
+| 🟢 Green | Supply / Offer posts |
+| 🔵 Blue | Friends Nearby + Top Helpers |
+| 🟡 Yellow | Current user's own location |
+
+### Walking Distance Radius
+
+- Displayed as a **dashed circle** around the user's location
+- User can adjust the radius by dragging or entering a value
+- Posts inside the radius are prioritised in listings
+
+### Map Marker Popup / Detail Card
+
+When a user clicks a marker on the map, a card appears showing:
+
+- Post title & description
+- Distance from user (e.g. "0.3 km away")
+- Poster's name & reputation rating (stars)
+- **Contact / Respond button** — opens the in-app chat
+- **Location: Approximate only** (general area, not exact address — privacy by design)
+
+### Dynamic Filtering Panel
+
+Accessible via the **[Filter ▼]** button:
+
+- Toggle: Need Help (show/hide red markers)
+- Toggle: Supply (show/hide green markers)
+- Toggle: Friends (show/hide blue markers)
+- Category filter: Tools / Food / Physical Help / Study Help / Custom
+
+---
+
+## Login & Authentication
+
+Users can sign in or register via:
+
+- **Email & password**
+- **Google / social login** (OAuth)
+- **Phone number** (OTP via SMS)
+
+---
 
 ## Needs Page
 
-Users can post requests for help.
+Users post requests for help. Each post contains:
 
-Requests may include:
+**Post Fields:**
+- Title & description
+- Category (preset or custom)
+- Urgency level: Low / Medium / High / ASAP
+- Duration / expiry (how long the item is needed, or when the post expires)
 
-### Borrowing Items
+**Preset Categories:**
+- Borrow an item (tools, equipment, household items)
+- Physical help (moving furniture, carrying boxes, repairs)
+- Food / sharing (need food, share leftovers)
+- Study / skills help (homework, translation, IT help)
+- ➕ User-defined custom categories
 
-Examples:
-
-- screwdriver  
-- ladder  
-- kitchen tools  
-- drill  
-- bicycle pump  
-
-Users can specify:
-
-- item name  
-- how long they need it  
-- approximate location  
-- urgency level  
-
-Example scenario:
-
-A student receives newly delivered furniture but lacks the tools to assemble it. Instead of buying a screwdriver, they can post:
-
-> “Need to borrow a screwdriver for about 30 minutes.”
-
-Nearby users who have one can respond quickly.
-
----
-
-### Requesting Physical Help
-
-Examples:
-
-- moving heavy furniture  
-- carrying boxes  
-- assembling furniture  
-- simple repairs  
-
----
-
-### Temporary Assistance
-
-Examples:
-
-- helping translate a document  
-- checking computer issues  
-- quick homework help  
-- short-term pet sitting  
+**Example scenario:** A student receives newly delivered furniture but lacks tools to assemble it. Instead of buying a screwdriver, they post: *"Need to borrow a screwdriver for about 30 minutes."* Nearby users who have one can respond immediately.
 
 ---
 
 ## Supply Page
 
-The Supply Page allows users to offer help or share resources.
+Users post offers of help or resources. Each post contains:
 
-### Lending Items
+**Post Fields:**
+- Title & description
+- Category (preset or custom)
+- Availability window (e.g. today only, this weekend)
+- Photo upload (optional — useful for showing the item being offered)
 
-Users can offer tools or household items such as:
-
-- tools  
-- kitchen equipment  
-- appliances  
-- sports equipment  
-
----
-
-### Offering Help
-
-Users may offer assistance such as:
-
-- helping move furniture  
-- helping carry groceries  
-- simple computer troubleshooting  
+**Preset Categories:**
+- Lend an item (tools, household items, equipment)
+- Offer physical help (moving, carrying, repairs)
+- Share food (extra cooked food, groceries)
+- Offer skills / knowledge (study help, translation, IT)
+- ➕ User-defined custom categories
 
 ---
 
-### Food Sharing
+## Chat / Messaging
 
-Users can share extra food they cannot finish.
+**How chat is initiated:**
+- From the map marker popup → click **"Contact"** button
+- From any Needs or Supply listing → click **"Respond"** button
 
-Example:
-
-> “I cooked too much dinner tonight. Anyone nearby want to share?”
-
-This reduces food waste and encourages social interaction.
-
----
-
-# Map-Based System
-
-The map is the **central interface** of the platform.
-
-When users open the app, they see a **neighborhood map** displaying nearby activities.
-
-Each user is represented by:
-
-- a small avatar  
-- a colored marker  
-- or a custom icon  
-
-## Marker Types
-
-Example map markers:
-
-🔴 Red marker — Need help  
-🟢 Green marker — Supply or offering help  
-🔵 Blue marker — Friends nearby  
-⭐ Gold marker — Top helper in the area  
-
-Users can zoom into the map to see:
-
-- nearby requests  
-- available resources  
-- active helpers  
-
-Clicking a marker opens a **detail card** containing:
-
-- request description  
-- distance  
-- user rating  
-- contact button  
-
-## Map Filters
-
-Users can filter requests by category:
-
-- tools  
-- food sharing  
-- moving help  
-- study help  
-- technical help  
-
-This makes it easier to find relevant opportunities nearby.
+**Features:**
+- Real-time text messaging between users (via WebSockets / Socket.io)
+- Photo sharing (e.g. photo of the item being lent)
+- Push notifications for new messages
 
 ---
 
-# Friend System
+## Profile Page
 
-Users can add others as **friends** after successful interactions.
-
-Benefits include:
-
-- faster communication  
-- stronger community relationships  
-- easier trust between users  
-
-When a friend posts a request, the system can send **automatic notifications** so they can respond quickly.
+Displays:
+- Avatar, name, general location, join date
+- Reputation score & earned badges (e.g. Top Helper, Food Sharer)
+- Post history (past Need and Supply posts)
+- Weekly leaderboard rank among nearby helpers
 
 ---
 
-# Reputation and Ranking System
+## Reputation & Ranking System
 
-To encourage helpful behavior, the platform includes a **community reputation system**.
-
-Users can:
-
-- rate interactions  
-- leave feedback  
-- confirm completed requests  
-
-Each week the app may display a **local leaderboard** showing the most helpful users.
-
-Example title:
-
-**Top Helper of the Week**
-
-This system helps:
-
-- reward positive behavior  
-- build trust between users  
-- encourage community participation  
+- After each completed exchange, both users rate each other **1–5 stars**
+- Ratings accumulate into an overall **reputation score** displayed on the profile and map popups
+- Weekly **local leaderboard** showing the most helpful users nearby
+- **Badges** awarded for milestones (e.g. Top Helper, Food Sharer, Community Builder)
+- **Micro-rewards:** appreciation points, digital badges, thank-you tokens
 
 ---
 
-# Communication System
+## Friend System
 
-The platform includes a **built-in chat system**.
-
-Users can:
-
-- message each other  
-- share location information  
-- arrange meeting times  
-- send item photos  
-
-This ensures smooth communication before meeting.
+- Users can add others as **friends** after successful interactions
+- Faster communication and stronger community relationships
+- When a friend posts a new request, the system sends **automatic notifications**
 
 ---
 
-# Additional Features
+## Safety Features
 
-## Distance-Based Matching
-
-The system prioritizes requests within a **short walking distance**.
-
----
-
-## Safety Verification
-
-Users can verify their identity using:
-
-- student email  
-- phone number  
-- university account  
+- **Identity verification** via student email, phone number, or university account
+- **Approximate location only** — exact addresses are never displayed
+- **Reporting tools** — users can report suspicious behaviour or posts
+- **Request expiration** — posts automatically expire to avoid outdated listings
 
 ---
 
-## Request Expiration
+## Technical Challenges
 
-Requests automatically expire after a certain time to avoid outdated posts.
-
----
-
-## Micro Reward System
-
-Users may receive:
-
-- appreciation points  
-- digital badges  
-- thank-you tokens  
-
-These encourage helpful participation.
+| Challenge | Approach |
+|---|---|
+| Real-time location matching | Geospatial queries in PostgreSQL (PostGIS); indexed radius search |
+| Real-time chat | WebSockets via Socket.io |
+| Trust & safety between strangers | Rating system + identity verification + reporting tools |
+| Data privacy | Approximate location display; no exact addresses stored or shown |
+| User adoption | University partnerships; student community promotion; incentive/reward systems |
 
 ---
 
-## Community Events
-
-Users may organize local events such as:
-
-- group study sessions  
-- cooking gatherings  
-- neighborhood meetups  
-
-This strengthens community connections.
-
----
-
-# System Architecture (Conceptual)
-
-The platform consists of several major components.
-
-## Frontend
-
-Website and mobile interface.
-
-Possible technologies:
-
-- React  
-- React Native  
-- Flutter  
-
----
-
-## Backend
-
-Handles system logic such as:
-
-- user authentication  
-- request management  
-- messaging  
-- ranking system  
-
-Possible technologies:
-
-- Node.js  
-- Express  
-- Firebase  
-
----
-
-## Database
-
-Stores platform data including:
-
-- user profiles  
-- help requests  
-- item listings  
-- ratings  
-- chat messages  
-
-Possible technologies:
-
-- PostgreSQL  
-- MongoDB  
-
----
-
-## Map Service
-
-Map visualization is provided through external APIs.
-
-Possible options:
-
-- Google Maps API  
-- Mapbox  
-
----
-
-# Technical Challenges
-
-## Real-Time Location Matching
-
-Efficiently matching nearby requests requires location filtering and fast updates.
-
----
-
-## Real-Time Communication
-
-Chat and notifications require technologies such as:
-
-- WebSockets  
-- Firebase real-time services  
-
----
-
-## Trust and Safety
-
-Interactions between strangers require safety mechanisms.
-
-Possible solutions:
-
-- rating systems  
-- user verification  
-- reporting tools  
-
----
-
-## Data Privacy
-
-Users should not reveal exact home addresses.
-
-The platform may display **approximate locations instead of precise addresses**.
-
----
-
-## User Adoption
-
-The platform works best when many users participate.
-
-Early growth may require:
-
-- university partnerships  
-- student community promotion  
-- incentive systems  
-
----
-
-# Expected Outcomes
+## Expected Outcomes
 
 If successful, the platform will:
 
-- reduce unnecessary purchases  
-- decrease food waste  
-- strengthen local communities  
-- help international students feel supported  
-- encourage kindness and cooperation in cities  
+- reduce unnecessary purchases and resource waste
+- decrease food waste through sharing
+- strengthen local communities
+- help international students feel supported and connected
+- encourage kindness and cooperation in cities
 
 The long-term goal is to transform anonymous city environments into **more connected and supportive communities**.
 
 ---
 
-# Future Development
+## Future Development
 
-Potential future improvements include:
-
-- AI recommendation for matching helpers  
-- smart request categorization  
-- predictive suggestions for nearby needs  
-- integration with campus communities  
+- AI-powered recommendation for matching helpers to requests
+- Smart request categorisation using NLP
+- Predictive suggestions for nearby needs
+- Integration with campus communities and university systems
+- Mobile application (React Native)
 
 ---
 
-# License
+## License
 
-This project is currently under development for academic purposes.
+This project is currently under development for academic purposes (INFO 90010).
