@@ -2,6 +2,7 @@
    -> need the completed/ returned buttom, to ensure that the transaction is completed </br>
    -> can have many requirer and supplier at the same time  </br>
    -> if the supplier doesn't click the completed buttom for the requirer more than three days, the requirer acccount will be locked  </br>
+   -> we need the reminder notification to remind users to return the items  </br>
 1.1 Who need to take the repsonsibility for broken item? </br>
    -> solution: need the consent form before creating an account (If needed, requirer should pay for the damgae)
 3. Cold Start? How to solve? </br>
