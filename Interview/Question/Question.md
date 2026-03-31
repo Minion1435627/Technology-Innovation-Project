@@ -13,3 +13,4 @@
    5.1 Profile System authentication completed 
 7. filter: gender, visualable photo for users, ages
 8. commercial and legal issues
+9. Can give the same users review more than once (In different tasks)
