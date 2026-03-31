@@ -3,9 +3,12 @@
    -> can have many requirer and supplier at the same time  </br>
    -> if the supplier doesn't click the completed buttom for the requirer more than three days, the requirer acccount will be locked  </br>
    -> we need the reminder notification to remind users to return the items  </br>
+   -> Also remind the supplier to click the complete buttom for the requirer </br>
+      -> after clicking the buttom, send the survey to users in order to record of how this task completed
 1.1 Who need to take the repsonsibility for broken item? </br>
    -> solution: need the consent form before creating an account (If needed, requirer should pay for the damgae)
 3. Cold Start? How to solve? </br>
+   -> Ask our friends for help first 
 4. Who need to take reponsibility for the injury in the task help?  </br>
    -> solution: need the consent form before creating an account </br>
 5. High score -> but broken item in purpose  </br>
