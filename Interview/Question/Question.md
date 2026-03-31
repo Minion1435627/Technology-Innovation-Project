@@ -8,8 +8,9 @@
 1.1 Who need to take the repsonsibility for broken item? </br>
    -> solution: need the consent form before creating an account (If needed, requirer should pay for the damgae)
 3. Cold Start? How to solve? </br>
-   -> Ask our friends for help first
-   -> Our interviewee 
+   -> Ask our friends for help first  </br>
+   -> Our interviewee  </br>
+   -> Ask the student club and school  </br>
 5. Who need to take reponsibility for the injury in the task help?  </br>
    -> solution: need the consent form before creating an account </br>
 6. High score -> but broken item in purpose  </br>
