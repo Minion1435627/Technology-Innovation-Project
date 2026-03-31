@@ -5,7 +5,7 @@
 3. Who need to take reponsibility for the injury in the task help?  </br>
 4. High score -> but broken item in purpose  </br>
    4.1 Maximum engagement between two users  </br>
-5. Verification Identity
+5. Verification Identity  </br>
    5.1 Profile System authentication completed 
 6. filter: gender, visualable photo for users, ages
 7. commercial and legal issues
