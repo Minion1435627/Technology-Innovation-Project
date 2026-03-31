@@ -8,3 +8,4 @@
 5. Verification Identity
    5.1 Profile System authentication completed 
 6. filter: gender, visualable photo for users, ages
+7. commercial and legal issues
