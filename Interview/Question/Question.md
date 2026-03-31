@@ -20,4 +20,4 @@
 8. filter: gender, visualable photo for users, ages
 9. commercial and legal issues
 10. Can give the same users review more than once (In different tasks)
-11. Avatar can stand beside the podium (only for top 3)
+11. Avatar can stand beside the podium (only for top 3) -> motivate the user to be the supplier
