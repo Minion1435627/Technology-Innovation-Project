@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   TextInput, Modal, ScrollView, Animated, PanResponder, Dimensions, ActivityIndicator,
 } from 'react-native';
 import * as Location from 'expo-location';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
@@ -16,17 +16,36 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SHEET_COLLAPSED = SCREEN_HEIGHT * 0.72; // how far down the sheet sits (collapsed)
 const SHEET_EXPANDED  = SCREEN_HEIGHT * 0.25; // how far down when expanded
 
-// Melbourne CBD area — real coordinates
+// Pins centred near Docklands / Marvel Stadium (-37.8144, 144.9398)
 const MOCK_PINS = [
-  { id: 'n1', type: 'need', latitude: -37.8000, longitude: 144.9600, title: 'Screwdriver needed', poster: { id: 'u2', name: 'Mia L.', level: 2, gender: 'Female' }, urgency: 'High', distance: '0.2 km', category: 'Borrow an item' },
-  { id: 'n2', type: 'need', latitude: -37.8050, longitude: 144.9680, title: 'Help moving boxes', poster: { id: 'u3', name: 'James W.', level: 1, gender: 'Male' }, urgency: 'ASAP', distance: '0.5 km', category: 'Physical help' },
-  { id: 's1', type: 'supply', latitude: -37.7970, longitude: 144.9630, title: 'Offering drill + tools', poster: { id: 'u6', name: 'David M.', level: 3, gender: 'Male' }, distance: '0.3 km', category: 'Lend an item' },
-  { id: 's2', type: 'supply', latitude: -37.8020, longitude: 144.9710, title: 'Free Thai food', poster: { id: 'u7', name: 'Nara P.', level: 2, gender: 'Female' }, distance: '0.6 km', category: 'Share food' },
-  { id: 'f1', type: 'friend', latitude: -37.7990, longitude: 144.9560, title: 'Emma R. (Friend)', poster: { id: 'u8', name: 'Emma R.', level: 3, gender: 'Female' }, distance: '0.9 km', category: 'Offer skills' },
+  { id: 'n1', type: 'need',   latitude: -37.8130, longitude: 144.9420, title: 'Need a screwdriver for IKEA shelf',       poster: { id: 'u2', name: 'Mia L.',    level: 2, gender: 'Female',     stars: 4.6 }, urgency: 'High', category: 'Borrow an item',  description: 'Moving into a new place — need a Phillips screwdriver for about 30 mins. Happy to come to you!', timePosted: '5 min ago' },
+  { id: 'n2', type: 'need',   latitude: -37.8160, longitude: 144.9450, title: 'Help carrying boxes up 3 flights',         poster: { id: 'u3', name: 'James W.',  level: 1, gender: 'Male',       stars: 4.9 }, urgency: 'ASAP', category: 'Physical help',   description: 'Moving day! Need 2 people for about an hour. Will shout pizza and drinks.', timePosted: '12 min ago' },
+  { id: 'n3', type: 'need',   latitude: -37.8115, longitude: 144.9370, title: 'Borrow a bicycle pump',                    poster: { id: 'u4', name: 'Sophie K.', level: 4, gender: 'Female',     stars: 5.0 }, urgency: 'Medium', category: 'Borrow an item', description: 'Flat tyre before uni — just need a pump for a minute.', timePosted: '20 min ago' },
+  { id: 'n4', type: 'need',   latitude: -37.8175, longitude: 144.9340, title: 'Help with Python assignment',               poster: { id: 'u5', name: 'Ryo T.',    level: 2, gender: 'Male',       stars: 4.3 }, urgency: 'Low',  category: 'Study / Skills', description: 'Stuck on a pandas data cleaning task. Can anyone spare 30 mins over video call?', timePosted: '1 hr ago' },
+  { id: 'n5', type: 'need',   latitude: -37.8095, longitude: 144.9435, title: 'Need someone to walk my dog',               poster: { id: 'u9', name: 'Lena B.',   level: 2, gender: 'Female',     stars: 4.7 }, urgency: 'Medium', category: 'Pet care',       description: 'Away for the afternoon, dog needs a 30-min walk around the waterfront.', timePosted: '35 min ago' },
+  { id: 's1', type: 'supply', latitude: -37.8138, longitude: 144.9408, title: 'Offering drill + full toolset',             poster: { id: 'u6', name: 'David M.', level: 3, gender: 'Male',       stars: 4.7 }, category: 'Lend an item',   description: 'Happy to lend my drill, screwdrivers, and hammer. Available Sat–Sun. Please return Sunday night.', availability: 'Sat–Sun this weekend', timePosted: '15 min ago' },
+  { id: 's2', type: 'supply', latitude: -37.8155, longitude: 144.9385, title: 'Free leftover Thai food',                   poster: { id: 'u7', name: 'Nara P.',  level: 2, gender: 'Female',     stars: 4.9 }, category: 'Share food',     description: 'Made too much dinner. Come grab some before 9pm tonight!', availability: 'Tonight until 9 PM', timePosted: '30 min ago' },
+  { id: 's3', type: 'supply', latitude: -37.8120, longitude: 144.9460, title: 'Can help with React / JS questions',        poster: { id: 'u8', name: 'Emma R.',  level: 3, gender: 'Female',     stars: 4.8 }, category: 'Offer skills',   description: '3rd year CS student. Happy to help with frontend questions this afternoon.', availability: 'Today 2–6 PM', timePosted: '45 min ago' },
+  { id: 's4', type: 'supply', latitude: -37.8108, longitude: 144.9395, title: 'Giving away houseplants',                   poster: { id: 'u10', name: 'Omar S.', level: 1, gender: 'Male',       stars: 4.5 }, category: 'Free item',      description: 'Moving out and can\'t take my plants. Free to good homes — pothos, spider plant, snake plant.', availability: 'This weekend', timePosted: '2 hrs ago' },
+  { id: 'f1', type: 'friend', latitude: -37.8148, longitude: 144.9428, title: 'Emma R. is nearby',                         poster: { id: 'u8', name: 'Emma R.',  level: 3, gender: 'Female',     stars: 4.8 }, category: 'Friend',         description: 'Emma is a trusted neighbour — she has helped 12 people this month!', timePosted: 'online now' },
+  { id: 'f2', type: 'friend', latitude: -37.8125, longitude: 144.9352, title: 'David M. is nearby',                        poster: { id: 'u6', name: 'David M.', level: 4, gender: 'Male',       stars: 4.7 }, category: 'Friend',         description: 'David is a Community Pillar — top helper this week with 380 pts!', timePosted: '10 min ago' },
 ];
 
+// Distance options in km
+const DISTANCE_OPTIONS = [0.5, 1, 2, 5];
+
+// Haversine formula — returns distance in km
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // Fallback location if permission denied
-const FALLBACK_LOCATION = { latitude: -37.8010, longitude: 144.9640 };
+const FALLBACK_LOCATION = { latitude: -37.8144, longitude: 144.9398 };
 
 const PIN_COLOR  = { need: colors.need, supply: colors.supply, friend: colors.friend };
 const PIN_BORDER = { need: '#ff6b6b', supply: '#51cf66', friend: '#74c0fc' };
@@ -57,24 +76,30 @@ const WARM_MAP_STYLE = [
   { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#ede0d4' }] },
 ];
 
-// Avatar-style marker with glow — no TouchableOpacity, let Marker handle onPress
+// Circular marker with colour glow
 function PinMarker({ pin }) {
-  const color  = PIN_COLOR[pin.type];
-  const border = PIN_BORDER[pin.type];
+  const color = PIN_COLOR[pin.type];
   return (
-    <View style={[styles.pinGlow, { shadowColor: color }]}>
-      <View style={[styles.pinRing, { borderColor: border }]}>
+    <View style={styles.pinWrapper}>
+      {/* Outer glow ring — semi-transparent circle */}
+      <View style={[styles.pinGlowRing, {
+        backgroundColor: color + '30',
+        shadowColor: color,
+      }]} />
+      {/* Inner white border ring */}
+      <View style={[styles.pinRing, { borderColor: color }]}>
+        {/* Coloured avatar circle */}
         <View style={[styles.pinAvatar, { backgroundColor: color }]}>
           <Text style={styles.pinInitial}>{pin.poster.name.charAt(0)}</Text>
         </View>
       </View>
-      <View style={[styles.pinTail, { borderTopColor: border }]} />
     </View>
   );
 }
 
 export default function MapScreen({ navigation }) {
-  const mapRef    = useRef(null);
+  const insets  = useSafeAreaInsets();
+  const mapRef  = useRef(null);
   const sheetAnim = useRef(new Animated.Value(SHEET_COLLAPSED)).current;
   const lastY     = useRef(SHEET_COLLAPSED);
   const [userLocation, setUserLocation] = useState(null);
@@ -85,6 +110,7 @@ export default function MapScreen({ navigation }) {
   const [search, setSearch]       = useState('');
   const [filters, setFilters]     = useState({ need: true, supply: true, friend: true });
   const [genderFilter, setGenderFilter] = useState({ Male: true, Female: true, 'Non-binary': true });
+  const [maxDistance, setMaxDistance] = useState(2); // km
 
   useEffect(() => {
     (async () => {
@@ -134,17 +160,23 @@ export default function MapScreen({ navigation }) {
     }, 500);
   };
 
+  const centre = userLocation ?? FALLBACK_LOCATION;
   const visiblePins = MOCK_PINS.filter(p => {
     if (!filters[p.type]) return false;
     if (p.poster.gender && !genderFilter[p.poster.gender]) return false;
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
+    const dist = getDistanceKm(centre.latitude, centre.longitude, p.latitude, p.longitude);
+    if (dist > maxDistance) return false;
     return true;
+  }).map(p => {
+    const dist = getDistanceKm(centre.latitude, centre.longitude, p.latitude, p.longitude);
+    return { ...p, distanceKm: dist, distance: dist < 1 ? `${Math.round(dist * 1000)} m` : `${dist.toFixed(1)} km` };
   });
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={styles.safe}>
 
-      {/* Map fills ALL space, search floats on top */}
+      {/* Map fills ALL space edge-to-edge */}
       <View style={styles.mapContainer}>
         <MapView
           ref={mapRef}
@@ -162,10 +194,10 @@ export default function MapScreen({ navigation }) {
           {userLocation && (
             <Circle
               center={userLocation}
-              radius={600}
+              radius={maxDistance * 1000}
               strokeColor={colors.primary}
               strokeWidth={2}
-              fillColor="rgba(91,79,233,0.07)"
+              fillColor="rgba(91,79,233,0.06)"
             />
           )}
           {visiblePins.map(pin => (
@@ -189,8 +221,8 @@ export default function MapScreen({ navigation }) {
           </View>
         )}
 
-        {/* Floating search bar */}
-        <View style={styles.searchOverlay}>
+        {/* Floating search bar — pushed below status bar */}
+        <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>
           <View style={styles.searchBar}>
             <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginLeft: 4 }} />
             <TextInput
@@ -212,7 +244,7 @@ export default function MapScreen({ navigation }) {
         </View>
 
         {/* Legend — horizontal row under search bar */}
-        <View style={styles.legend}>
+        <View style={[styles.legend, { top: insets.top + 66 }]}>
           {[
             { color: colors.need,   label: 'Need' },
             { color: colors.supply, label: 'Supply' },
@@ -313,6 +345,18 @@ export default function MapScreen({ navigation }) {
                 <Text style={styles.tooltipMetaItem}>📍 {tooltip.distance} away</Text>
               </View>
 
+              {/* Description */}
+              {tooltip.description && (
+                <Text style={styles.tooltipDescription}>{tooltip.description}</Text>
+              )}
+
+              {/* Availability */}
+              {tooltip.availability && (
+                <View style={styles.availabilityRow}>
+                  <Text style={styles.availabilityText}>🕐 {tooltip.availability}</Text>
+                </View>
+              )}
+
               {/* Divider */}
               <View style={styles.divider} />
 
@@ -384,6 +428,26 @@ export default function MapScreen({ navigation }) {
               </TouchableOpacity>
             ))}
 
+            {/* Distance filter */}
+            <Text style={[styles.filterSectionLabel, { marginTop: 8 }]}>SEARCH RADIUS</Text>
+            <View style={styles.genderChips}>
+              {DISTANCE_OPTIONS.map(d => (
+                <TouchableOpacity
+                  key={d}
+                  style={[
+                    styles.genderChip,
+                    { borderColor: colors.primary },
+                    maxDistance === d && { backgroundColor: colors.primary },
+                  ]}
+                  onPress={() => setMaxDistance(d)}
+                >
+                  <Text style={[styles.genderChipText, maxDistance === d && { color: '#fff' }]}>
+                    {d < 1 ? `${d * 1000}m` : `${d} km`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {/* Gender filter */}
             <Text style={[styles.filterSectionLabel, { marginTop: 8 }]}>POSTER GENDER</Text>
             <View style={styles.genderChips}>
@@ -411,16 +475,15 @@ export default function MapScreen({ navigation }) {
         </TouchableOpacity>
       </Modal>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1 },
 
   searchOverlay: {
     position: 'absolute',
-    top: 12,
     left: 12,
     right: 12,
     flexDirection: 'row',
@@ -480,7 +543,6 @@ const styles = StyleSheet.create({
 
   legend: {
     position: 'absolute',
-    top: 70,
     left: 12,
     right: 12,
     flexDirection: 'row',
@@ -499,33 +561,35 @@ const styles = StyleSheet.create({
   legendDot: { width: 9, height: 9, borderRadius: 5 },
   legendLabel: { ...typography.caption, color: colors.textPrimary, fontWeight: '600' },
 
-  // ── Avatar-style marker ──
-  pinGlow: {
-    alignItems: 'center',
+  // ── Circular marker with glow ──
+  pinWrapper: {
+    width: 56, height: 56,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pinGlowRing: {
+    position: 'absolute',
+    width: 56, height: 56, borderRadius: 28,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.5,
     shadowRadius: 10,
-    elevation: 8,
+    elevation: 0,
   },
   pinRing: {
-    width: 48, height: 48, borderRadius: 24,
+    width: 44, height: 44, borderRadius: 22,
     borderWidth: 3,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#fff',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 6,
   },
   pinAvatar: {
-    width: 38, height: 38, borderRadius: 19,
+    width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
   },
-  pinInitial: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  pinTail: {
-    width: 0, height: 0,
-    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    marginTop: -1,
-  },
+  pinInitial: { fontSize: 15, fontWeight: '800', color: '#fff' },
 
   // ── Bottom sheet ──
   sheet: {
@@ -614,6 +678,12 @@ const styles = StyleSheet.create({
   tooltipMeta2: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   tooltipMetaItem: { ...typography.small, color: colors.textSecondary },
   tooltipMetaDot: { ...typography.small, color: colors.textMuted },
+  tooltipDescription: { ...typography.body, color: colors.textSecondary, lineHeight: 20 },
+  availabilityRow: {
+    backgroundColor: colors.primaryLight, borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5, alignSelf: 'flex-start',
+  },
+  availabilityText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: colors.border },
 
