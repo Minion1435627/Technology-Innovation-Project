@@ -22,6 +22,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import PostScreen from '../screens/PostScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
+import TransactionScreen from '../screens/TransactionScreen';
 
 // Mini-games
 import FarmerScreen from '../screens/minigames/FarmerScreen';
@@ -94,6 +95,7 @@ function MainNavigator() {
       <MainStack.Screen name="Farmer" component={FarmerScreen} />
       <MainStack.Screen name="Fisher" component={FisherScreen} />
       <MainStack.Screen name="UserProfile" component={UserProfileScreen} />
+      <MainStack.Screen name="Transaction" component={TransactionScreen} />
     </MainStack.Navigator>
   );
 }

@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { mockUser, mockReviews, mockNeeds, mockSupplies } from '../data/mockData';
+import { Ionicons } from '@expo/vector-icons';
+import { mockUser, mockReviews, mockNeeds, mockSupplies, mockTransactions } from '../data/mockData';
 
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
@@ -123,6 +124,40 @@ export default function ProfileScreen({ navigation }) {
             ))}
           </ScrollView>
         </View>
+
+        {/* Active Exchanges */}
+        {mockTransactions.filter(t => t.status !== 'completed').length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Active Exchanges</Text>
+            {mockTransactions.filter(t => t.status !== 'completed').map(tx => {
+              const STATUS_COLOR = { pending: '#f59f00', in_progress: '#1c7ed6', overdue: '#e03131', disputed: '#9c36b5' };
+              const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', overdue: 'Overdue', disputed: 'Disputed' };
+              return (
+                <TouchableOpacity
+                  key={tx.id}
+                  style={[styles.txCard, tx.status === 'overdue' && styles.txCardOverdue]}
+                  onPress={() => navigation.navigate('Transaction', { transaction: tx })}
+                >
+                  <View style={styles.txLeft}>
+                    <View style={[styles.txStatusDot, { backgroundColor: STATUS_COLOR[tx.status] }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.txItem}>{tx.item}</Text>
+                      <Text style={styles.txWith}>
+                        {tx.myRole === 'requester' ? `From ${tx.provider.name}` : `To ${tx.requester.name}`}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.txRight}>
+                    <Text style={[styles.txStatus, { color: STATUS_COLOR[tx.status] }]}>
+                      {STATUS_LABEL[tx.status]}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Mini-game shortcuts */}
         <View style={styles.section}>
@@ -305,6 +340,18 @@ const styles = StyleSheet.create({
 
   section: { paddingHorizontal: 16, marginBottom: 8 },
   sectionTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: 12 },
+  txCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  txCardOverdue: { borderColor: '#e03131', backgroundColor: '#fff5f5' },
+  txLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  txStatusDot: { width: 10, height: 10, borderRadius: 5 },
+  txItem: { ...typography.smallBold, color: colors.textPrimary },
+  txWith: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  txRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  txStatus: { ...typography.caption, fontWeight: '700' },
   achieveScroll: {},
   achieveCard: {
     backgroundColor: colors.card,

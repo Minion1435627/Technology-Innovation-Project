@@ -230,6 +230,50 @@ export const mockReviews = [
   },
 ];
 
+// Transaction / Exchange system
+export const mockTransactions = [
+  {
+    id: 't1',
+    status: 'in_progress',        // pending | in_progress | completed | overdue | disputed
+    type: 'borrow',               // borrow | service | food
+    postTitle: 'Offering drill + full toolset',
+    item: 'Drill + full toolset',
+    provider: { id: 'u6', name: 'David M.', level: 4, stars: 4.7 },
+    requester: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
+    myRole: 'requester',
+    handoverDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    agreedReturnDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    notes: 'Return to Unit 4 / 12 Lygon St before Sunday night.',
+  },
+  {
+    id: 't2',
+    status: 'overdue',
+    type: 'borrow',
+    postTitle: 'Need a screwdriver to assemble IKEA shelf',
+    item: 'Phillips screwdriver',
+    provider: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
+    requester: { id: 'u2', name: 'Mia L.', level: 2, stars: 4.6 },
+    myRole: 'provider',
+    handoverDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    agreedReturnDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    notes: 'Return to Carlton North any time.',
+  },
+  {
+    id: 't3',
+    status: 'completed',
+    type: 'service',
+    postTitle: 'Help carrying boxes up 3 flights',
+    item: 'Physical help — moving',
+    provider: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
+    requester: { id: 'u3', name: 'James W.', level: 1, stars: 4.9 },
+    myRole: 'provider',
+    handoverDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    agreedReturnDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    completedDate: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
+    notes: 'Completed same day.',
+  },
+];
+
 export const mockFarmerCrops = [
   { id: 'cr1', name: 'Tomato', emoji: '🍅', level: 2, status: 'ready', plantedAt: '2 days ago' },
   { id: 'cr2', name: 'Blueberry', emoji: '🫐', level: 3, status: 'growing', progress: 0.6, hoursLeft: 14 },

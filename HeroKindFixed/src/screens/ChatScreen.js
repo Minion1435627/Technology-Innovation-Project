@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
+import { Ionicons } from '@expo/vector-icons';
 import { mockMessages } from '../data/mockData';
 
 export default function ChatScreen({ navigation, route }) {
@@ -91,13 +92,34 @@ export default function ChatScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        {/* Pinned post reference */}
+        {/* Pinned post reference + Start Exchange */}
         <View style={styles.postRef}>
           <View style={styles.postRefAccent} />
           <View style={styles.postRefBody}>
             <Text style={styles.postRefLabel}>📌 Post reference</Text>
-            <Text style={styles.postRefTitle}>Offering drill + full toolset for the weekend</Text>
+            <Text style={styles.postRefTitle}>{chat?.postTitle ?? 'Offering drill + full toolset for the weekend'}</Text>
           </View>
+          <TouchableOpacity
+            style={styles.exchangeBtn}
+            onPress={() => navigation.navigate('Transaction', {
+              transaction: {
+                id: `t_${Date.now()}`,
+                status: 'pending',
+                type: 'borrow',
+                postTitle: chat?.postTitle ?? 'Exchange',
+                item: chat?.postTitle ?? 'Item',
+                provider: { id: otherUserId, name: otherUserName, level: 3, stars: 4.7 },
+                requester: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
+                myRole: 'requester',
+                handoverDate: new Date().toISOString(),
+                agreedReturnDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+                notes: 'Agreed via chat.',
+              }
+            })}
+          >
+            <Ionicons name="swap-horizontal-outline" size={14} color={colors.primary} />
+            <Text style={styles.exchangeBtnText}>Start Exchange</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Gate notice */}
@@ -173,11 +195,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     padding: 10,
     gap: 8,
+    alignItems: 'center',
   },
-  postRefAccent: { width: 3, backgroundColor: colors.primary, borderRadius: 2 },
+  postRefAccent: { width: 3, backgroundColor: colors.primary, borderRadius: 2, alignSelf: 'stretch' },
   postRefBody: { flex: 1 },
   postRefLabel: { ...typography.caption, color: colors.primary, marginBottom: 2 },
   postRefTitle: { ...typography.smallBold, color: colors.textPrimary },
+  exchangeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#fff', borderRadius: 10, borderWidth: 1,
+    borderColor: colors.primary, paddingHorizontal: 8, paddingVertical: 5,
+  },
+  exchangeBtnText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
 
   gateNotice: {
     backgroundColor: colors.warning + '22',

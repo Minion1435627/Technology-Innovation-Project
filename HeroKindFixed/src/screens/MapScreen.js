@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  TextInput, Modal, ScrollView, Animated, PanResponder, Dimensions, ActivityIndicator,
+  TextInput, Modal, ScrollView, Dimensions, ActivityIndicator,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,9 +12,6 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import UrgencyBadge from '../components/UrgencyBadge';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const SHEET_COLLAPSED = SCREEN_HEIGHT * 0.72; // how far down the sheet sits (collapsed)
-const SHEET_EXPANDED  = SCREEN_HEIGHT * 0.25; // how far down when expanded
 
 // Pins centred near Docklands / Marvel Stadium (-37.8144, 144.9398)
 const MOCK_PINS = [
@@ -100,11 +97,9 @@ function PinMarker({ pin }) {
 export default function MapScreen({ navigation }) {
   const insets  = useSafeAreaInsets();
   const mapRef  = useRef(null);
-  const sheetAnim = useRef(new Animated.Value(SHEET_COLLAPSED)).current;
-  const lastY     = useRef(SHEET_COLLAPSED);
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [nearbyOpen, setNearbyOpen] = useState(false);
   const [tooltip, setTooltip]     = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [search, setSearch]       = useState('');
@@ -126,29 +121,6 @@ export default function MapScreen({ navigation }) {
       setLocationLoading(false);
     })();
   }, []);
-
-  // Pan responder for dragging the sheet
-  const panResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onPanResponderMove: (_, g) => {
-      const next = Math.max(SHEET_EXPANDED, Math.min(SHEET_COLLAPSED, lastY.current + g.dy));
-      sheetAnim.setValue(next);
-    },
-    onPanResponderRelease: (_, g) => {
-      const next = lastY.current + g.dy;
-      const snapTo = next < (SHEET_EXPANDED + SHEET_COLLAPSED) / 2 ? SHEET_EXPANDED : SHEET_COLLAPSED;
-      Animated.spring(sheetAnim, { toValue: snapTo, useNativeDriver: false, bounciness: 4 }).start();
-      lastY.current = snapTo;
-      setSheetOpen(snapTo === SHEET_EXPANDED);
-    },
-  })).current;
-
-  const toggleSheet = () => {
-    const snapTo = sheetOpen ? SHEET_COLLAPSED : SHEET_EXPANDED;
-    Animated.spring(sheetAnim, { toValue: snapTo, useNativeDriver: false, bounciness: 4 }).start();
-    lastY.current = snapTo;
-    setSheetOpen(!sheetOpen);
-  };
 
   const recenterMap = () => {
     const loc = userLocation ?? FALLBACK_LOCATION;
@@ -223,6 +195,12 @@ export default function MapScreen({ navigation }) {
 
         {/* Floating search bar — pushed below status bar */}
         <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>
+          {/* Nearby list button */}
+          <TouchableOpacity style={styles.nearbyBtn} onPress={() => setNearbyOpen(true)}>
+            <Ionicons name="people" size={20} color={colors.primary} />
+            <Text style={styles.nearbyBtnCount}>{visiblePins.length}</Text>
+          </TouchableOpacity>
+
           <View style={styles.searchBar}>
             <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginLeft: 4 }} />
             <TextInput
@@ -262,58 +240,61 @@ export default function MapScreen({ navigation }) {
           <Ionicons name="navigate" size={22} color="#4A90E2" />
         </TouchableOpacity>
 
-        {/* ── Pull-up bottom sheet ── */}
-        <Animated.View style={[styles.sheet, { top: sheetAnim }]}>
-          {/* Drag handle */}
-          <View style={styles.sheetHandle} {...panResponder.panHandlers}>
-            <View style={styles.handleBar} />
-            <TouchableOpacity onPress={toggleSheet} style={styles.sheetHeaderRow}>
-              <Text style={styles.sheetTitle}>NEARBY HELPERS</Text>
-              <Text style={styles.sheetSubtitle}>Sorted by Distance</Text>
-              <Text style={styles.sheetChevron}>{sheetOpen ? '▾' : '▴'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Scrollable list */}
-          <ScrollView style={styles.sheetList} showsVerticalScrollIndicator={false}>
-            {visiblePins.map(pin => (
-              <TouchableOpacity
-                key={pin.id}
-                style={styles.sheetRow}
-                onPress={() => setTooltip(pin)}
-              >
-                {/* Avatar with coloured ring */}
-                <View style={[styles.sheetAvatarRing, { borderColor: PIN_COLOR[pin.type] }]}>
-                  <View style={[styles.sheetAvatarCircle, { backgroundColor: PIN_COLOR[pin.type] }]}>
-                    <Text style={styles.sheetAvatarInitial}>{pin.poster.name.charAt(0)}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.sheetInfo}>
-                  <Text style={styles.sheetName}>{pin.poster.name}</Text>
-                  <Text style={styles.sheetCategory}>{pin.category}</Text>
-                </View>
-
-                <View style={styles.sheetRight}>
-                  <Text style={styles.sheetDist}>{pin.distance}</Text>
-                  <View style={[styles.sheetTypeBadge, { backgroundColor: PIN_COLOR[pin.type] + '22' }]}>
-                    <Text style={[styles.sheetTypeText, { color: PIN_COLOR[pin.type] }]}>
-                      {pin.type === 'need' ? 'Need' : pin.type === 'supply' ? 'Supply' : 'Friend'}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Request help button */}
-          <View style={styles.sheetFooter}>
-            <TouchableOpacity style={styles.requestBtn} onPress={() => navigation.navigate('Post')}>
-              <Text style={styles.requestBtnText}>+ REQUEST HELP</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
+        {/* ── Fixed REQUEST HELP button — pinned above tab bar ── */}
+        <View style={styles.fixedRequestBtn}>
+          <TouchableOpacity style={styles.requestBtn} onPress={() => navigation.navigate('Post')}>
+            <Text style={styles.requestBtnText}>+ REQUEST HELP</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* ── Nearby Helpers Modal ── */}
+      <Modal visible={nearbyOpen} transparent animationType="slide" onRequestClose={() => setNearbyOpen(false)}>
+        <TouchableOpacity style={styles.tooltipBackdrop} activeOpacity={1} onPress={() => setNearbyOpen(false)}>
+          <View style={styles.nearbySheet}>
+            <View style={styles.tooltipHandle} />
+            <View style={styles.nearbySheetHeader}>
+              <Ionicons name="people" size={18} color={colors.primary} />
+              <Text style={styles.nearbySheetTitle}>NEARBY HELPERS</Text>
+              <Text style={styles.nearbySheetSub}>Sorted by Distance</Text>
+              <TouchableOpacity onPress={() => setNearbyOpen(false)} style={{ marginLeft: 'auto' }}>
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {visiblePins.length === 0 ? (
+                <Text style={styles.nearbyEmpty}>No posts match your current filters.</Text>
+              ) : visiblePins.map(pin => (
+                <TouchableOpacity
+                  key={pin.id}
+                  style={styles.sheetRow}
+                  onPress={() => { setNearbyOpen(false); setTooltip(pin); }}
+                >
+                  <View style={[styles.sheetAvatarRing, { borderColor: PIN_COLOR[pin.type] }]}>
+                    <View style={[styles.sheetAvatarCircle, { backgroundColor: PIN_COLOR[pin.type] }]}>
+                      <Text style={styles.sheetAvatarInitial}>{pin.poster.name.charAt(0)}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.sheetInfo}>
+                    <Text style={styles.sheetName}>{pin.poster.name}</Text>
+                    <Text style={styles.sheetCategory} numberOfLines={1}>{pin.title}</Text>
+                    <Text style={styles.sheetCategorySub}>{pin.category}</Text>
+                  </View>
+                  <View style={styles.sheetRight}>
+                    <Text style={styles.sheetDist}>{pin.distance}</Text>
+                    <View style={[styles.sheetTypeBadge, { backgroundColor: PIN_COLOR[pin.type] + '22' }]}>
+                      <Text style={[styles.sheetTypeText, { color: PIN_COLOR[pin.type] }]}>
+                        {pin.type === 'need' ? 'Need' : pin.type === 'supply' ? 'Supply' : 'Friend'}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Tooltip Modal */}
       <Modal visible={!!tooltip} transparent animationType="slide" onRequestClose={() => setTooltip(null)}>
@@ -591,32 +572,44 @@ const styles = StyleSheet.create({
   },
   pinInitial: { fontSize: 15, fontWeight: '800', color: '#fff' },
 
-  // ── Bottom sheet ──
-  sheet: {
-    position: 'absolute',
-    left: 0, right: 0, bottom: 0,
+  // ── Nearby button (search bar) ──
+  nearbyBtn: {
+    width: 46, height: 46,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12, shadowRadius: 12, elevation: 16,
+    borderRadius: 23,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 8, elevation: 5,
   },
-  sheetHandle: {
-    paddingTop: 10, paddingBottom: 6,
-    paddingHorizontal: 20,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+  nearbyBtnCount: {
+    position: 'absolute', top: 6, right: 6,
+    backgroundColor: colors.primary,
+    color: '#fff', fontSize: 9, fontWeight: '800',
+    borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1,
+    overflow: 'hidden',
   },
+
+  // ── Nearby helpers modal sheet ──
+  nearbySheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 16, paddingTop: 12,
+    maxHeight: '75%',
+  },
+  nearbySheetHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+    marginBottom: 4,
+  },
+  nearbySheetTitle: { ...typography.smallBold, color: colors.textPrimary, letterSpacing: 0.5 },
+  nearbySheetSub: { ...typography.caption, color: colors.textSecondary },
+  nearbyEmpty: { ...typography.body, color: colors.textMuted, textAlign: 'center', paddingVertical: 32 },
+
   handleBar: {
     width: 40, height: 4, backgroundColor: colors.border,
     borderRadius: 2, alignSelf: 'center', marginBottom: 10,
   },
-  sheetHeaderRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-  },
-  sheetTitle: { ...typography.smallBold, color: colors.textPrimary, letterSpacing: 0.5 },
-  sheetSubtitle: { ...typography.caption, color: colors.textSecondary, flex: 1 },
-  sheetChevron: { fontSize: 14, color: colors.textMuted },
-
-  sheetList: { maxHeight: 280, paddingHorizontal: 16 },
 
   sheetRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -636,14 +629,23 @@ const styles = StyleSheet.create({
   sheetAvatarInitial: { fontSize: 18, fontWeight: '700', color: '#fff' },
   sheetInfo: { flex: 1 },
   sheetName: { ...typography.bodyBold, color: colors.textPrimary },
-  sheetCategory: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  sheetCategory: { ...typography.smallBold, color: colors.textSecondary, marginTop: 1 },
+  sheetCategorySub: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
   sheetRight: { alignItems: 'flex-end', gap: 4 },
   sheetDist: { ...typography.smallBold, color: colors.textPrimary },
   sheetTypeBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
   sheetTypeText: { ...typography.caption, fontWeight: '700' },
 
-  sheetFooter: {
-    padding: 16, borderTopWidth: 1, borderTopColor: colors.border,
+  // ── Fixed request help button ──
+  fixedRequestBtn: {
+    position: 'absolute',
+    left: 16, right: 16, bottom: 16,
+    zIndex: 20,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
   },
   requestBtn: {
     backgroundColor: colors.primary, borderRadius: 14,
