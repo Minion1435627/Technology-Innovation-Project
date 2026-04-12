@@ -1,10 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  TextInput, Modal, ScrollView, Animated, PanResponder, Dimensions,
+  TextInput, Modal, ScrollView, Animated, PanResponder, Dimensions, ActivityIndicator,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
@@ -23,13 +25,37 @@ const MOCK_PINS = [
   { id: 'f1', type: 'friend', latitude: -37.7990, longitude: 144.9560, title: 'Emma R. (Friend)', poster: { id: 'u8', name: 'Emma R.', level: 3, gender: 'Female' }, distance: '0.9 km', category: 'Offer skills' },
 ];
 
-// My location (Carlton North / Melbourne Uni area)
-const MY_LOCATION = { latitude: -37.8010, longitude: 144.9640 };
+// Fallback location if permission denied
+const FALLBACK_LOCATION = { latitude: -37.8010, longitude: 144.9640 };
 
 const PIN_COLOR  = { need: colors.need, supply: colors.supply, friend: colors.friend };
 const PIN_BORDER = { need: '#ff6b6b', supply: '#51cf66', friend: '#74c0fc' };
 const GENDER_ICON = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
 const GENDER_COLOR = { Male: '#4dabf7', Female: '#f783ac', 'Non-binary': '#a78bfa' };
+
+// Warm, humanized map style
+const WARM_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#f5ebe0' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#6b4f3a' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#fff8f0' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e8d5c4' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#fcd5a2' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e8b87a' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#fff3e8' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#aad3e8' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#5b8fa8' }] },
+  { featureType: 'park', elementType: 'geometry', stylers: [{ color: '#c8e6c0' }] },
+  { featureType: 'park', elementType: 'labels.text.fill', stylers: [{ color: '#4a7c59' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#ede0d4' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#c8e6c0' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d4a97a' }] },
+  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#9a7b6a' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#f0ddd0' }] },
+  { featureType: 'transit.station', elementType: 'labels.icon', stylers: [{ saturation: -20 }] },
+  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#ede0d4' }] },
+];
 
 // Avatar-style marker with glow — no TouchableOpacity, let Marker handle onPress
 function PinMarker({ pin }) {
@@ -51,12 +77,29 @@ export default function MapScreen({ navigation }) {
   const mapRef    = useRef(null);
   const sheetAnim = useRef(new Animated.Value(SHEET_COLLAPSED)).current;
   const lastY     = useRef(SHEET_COLLAPSED);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [tooltip, setTooltip]     = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [search, setSearch]       = useState('');
   const [filters, setFilters]     = useState({ need: true, supply: true, friend: true });
   const [genderFilter, setGenderFilter] = useState({ Male: true, Female: true, 'Non-binary': true });
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setUserLocation(coords);
+        mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.03, longitudeDelta: 0.03 }, 500);
+      } else {
+        setUserLocation(FALLBACK_LOCATION);
+      }
+      setLocationLoading(false);
+    })();
+  }, []);
 
   // Pan responder for dragging the sheet
   const panResponder = useRef(PanResponder.create({
@@ -82,9 +125,10 @@ export default function MapScreen({ navigation }) {
   };
 
   const recenterMap = () => {
+    const loc = userLocation ?? FALLBACK_LOCATION;
     mapRef.current?.animateToRegion({
-      latitude: MY_LOCATION.latitude,
-      longitude: MY_LOCATION.longitude,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
       latitudeDelta: 0.03,
       longitudeDelta: 0.03,
     }, 500);
@@ -100,53 +144,30 @@ export default function MapScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
 
-      {/* Search bar */}
-      <View style={styles.searchOverlay}>
-        <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search nearby posts…"
-            placeholderTextColor={colors.textMuted}
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Text style={styles.clearIcon}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterOpen(true)}>
-          <Text style={styles.filterIcon}>⚙️</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.postBtn} onPress={() => navigation.navigate('Post')}>
-          <Text style={styles.postBtnText}>+ Post</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Map fills remaining space */}
+      {/* Map fills ALL space, search floats on top */}
       <View style={styles.mapContainer}>
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
           provider={PROVIDER_GOOGLE}
           initialRegion={{
-            latitude: MY_LOCATION.latitude,
-            longitude: MY_LOCATION.longitude,
+            latitude: FALLBACK_LOCATION.latitude,
+            longitude: FALLBACK_LOCATION.longitude,
             latitudeDelta: 0.03,
             longitudeDelta: 0.03,
           }}
           showsUserLocation={true}
           showsMyLocationButton={false}
         >
-          <Circle
-            center={MY_LOCATION}
-            radius={600}
-            strokeColor={colors.primary}
-            strokeWidth={2}
-            fillColor="rgba(91,79,233,0.07)"
-          />
+          {userLocation && (
+            <Circle
+              center={userLocation}
+              radius={600}
+              strokeColor={colors.primary}
+              strokeWidth={2}
+              fillColor="rgba(91,79,233,0.07)"
+            />
+          )}
           {visiblePins.map(pin => (
             <Marker
               key={pin.id}
@@ -160,12 +181,37 @@ export default function MapScreen({ navigation }) {
           ))}
         </MapView>
 
-        {/* Recenter */}
-        <TouchableOpacity style={styles.recenterBtn} onPress={recenterMap}>
-          <Text style={styles.recenterIcon}>📍</Text>
-        </TouchableOpacity>
+        {/* Location loading overlay */}
+        {locationLoading && (
+          <View style={styles.locationLoading}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.locationLoadingText}>Finding your location…</Text>
+          </View>
+        )}
 
-        {/* Legend */}
+        {/* Floating search bar */}
+        <View style={styles.searchOverlay}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginLeft: 4 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search nearby posts…"
+              placeholderTextColor={colors.textMuted}
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')}>
+                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterOpen(true)}>
+            <Ionicons name="options-outline" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Legend — horizontal row under search bar */}
         <View style={styles.legend}>
           {[
             { color: colors.need,   label: 'Need' },
@@ -178,6 +224,11 @@ export default function MapScreen({ navigation }) {
             </View>
           ))}
         </View>
+
+        {/* Recenter — blue arrow icon */}
+        <TouchableOpacity style={styles.recenterBtn} onPress={recenterMap}>
+          <Ionicons name="navigate" size={22} color="#4A90E2" />
+        </TouchableOpacity>
 
         {/* ── Pull-up bottom sheet ── */}
         <Animated.View style={[styles.sheet, { top: sheetAnim }]}>
@@ -368,52 +419,85 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
 
   searchOverlay: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 10, gap: 8,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 10,
   },
   searchBar: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.background, borderRadius: 12,
-    paddingHorizontal: 10, height: 40, gap: 6,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 30,
+    paddingHorizontal: 12,
+    height: 46,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  searchIcon: { fontSize: 16 },
   searchInput: { flex: 1, ...typography.body, color: colors.textPrimary },
-  clearIcon: { fontSize: 14, color: colors.textMuted, padding: 4 },
   filterBtn: {
-    width: 40, height: 40, backgroundColor: colors.background,
-    borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    width: 46, height: 46,
+    backgroundColor: '#fff',
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  filterIcon: { fontSize: 18 },
-  postBtn: {
-    backgroundColor: colors.primary, borderRadius: 12,
-    paddingHorizontal: 14, height: 40, alignItems: 'center', justifyContent: 'center',
-  },
-  postBtnText: { ...typography.smallBold, color: colors.textWhite },
 
   // Map
   mapContainer: { flex: 1, position: 'relative' },
+  locationLoading: {
+    position: 'absolute', bottom: 120, alignSelf: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 6, elevation: 4,
+    zIndex: 10,
+  },
+  locationLoadingText: { ...typography.small, color: colors.textSecondary },
 
   recenterBtn: {
-    position: 'absolute', bottom: 200, right: 16,
-    width: 44, height: 44, borderRadius: 22,
+    position: 'absolute', bottom: 210, right: 16,
+    width: 52, height: 52, borderRadius: 26,
     backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 4, elevation: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 6,
   },
-  recenterIcon: { fontSize: 22 },
 
   legend: {
-    position: 'absolute', top: 12, right: 12,
-    backgroundColor: 'rgba(255,255,255,0.93)',
-    borderRadius: 12, padding: 10, gap: 6,
+    position: 'absolute',
+    top: 70,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    zIndex: 10,
+  },
+  legendItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 6,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendLabel: { ...typography.caption, color: colors.textPrimary },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendLabel: { ...typography.caption, color: colors.textPrimary, fontWeight: '600' },
 
   // ── Avatar-style marker ──
   pinGlow: {

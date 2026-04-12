@@ -1,7 +1,7 @@
 export const colors = {
   // Brand
   primary: '#5B4FE9',
-  primaryLight: '#EAE8FD',
+  primaryLight: '#ECEAFD',
   primaryDark: '#3D34B8',
   accent: '#FF6B6B',
 
@@ -15,15 +15,15 @@ export const colors = {
   myLocation: '#FED330',
 
   // UI
-  background: '#F5F6FA',
-  card: '#FFFFFF',
-  border: '#E8ECF0',
-  shadow: 'rgba(0,0,0,0.08)',
+  background: '#F7F3EF',
+  card: '#FFFCF9',
+  border: '#EDE5DC',
+  shadow: 'rgba(0,0,0,0.07)',
 
   // Text
-  textPrimary: '#2C3E50',
-  textSecondary: '#7F8C8D',
-  textMuted: '#BDC3C7',
+  textPrimary: '#2C2420',
+  textSecondary: '#7A6E68',
+  textMuted: '#B8ADA6',
   textWhite: '#FFFFFF',
 
   // Status

@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
+
 
 import { colors } from '../theme/colors';
 
@@ -30,12 +32,12 @@ const MainStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS = {
-  Map: '🗺️',
-  Nearby: '📋',
-  Chat: '💬',
-  Leaderboard: '🏆',
-  Games: '🎮',
-  Profile: '👤',
+  Map:         { active: 'map',                      inactive: 'map-outline' },
+  Nearby:      { active: 'people',                   inactive: 'people-outline' },
+  Chat:        { active: 'chatbubble-ellipses',      inactive: 'chatbubble-ellipses-outline' },
+  Leaderboard: { active: 'trophy',                   inactive: 'trophy-outline' },
+  Games:       { active: 'game-controller',          inactive: 'game-controller-outline' },
+  Profile:     { active: 'person-circle',            inactive: 'person-circle-outline' },
 };
 
 const TAB_LABELS = {
@@ -63,10 +65,12 @@ function MainTabs() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontSize: 9, fontWeight: '600' },
-        tabBarIcon: ({ focused }) => (
-          <Text style={{ fontSize: 19, opacity: focused ? 1 : 0.5 }}>
-            {TAB_ICONS[route.name]}
-          </Text>
+        tabBarIcon: ({ focused, color }) => (
+          <Ionicons
+            name={focused ? TAB_ICONS[route.name].active : TAB_ICONS[route.name].inactive}
+            size={22}
+            color={color}
+          />
         ),
         tabBarLabel: TAB_LABELS[route.name],
       })}
