@@ -105,7 +105,7 @@ export default function MapScreen({ navigation }) {
   const [search, setSearch]       = useState('');
   const [filters, setFilters]     = useState({ need: true, supply: true, friend: true });
   const [genderFilter, setGenderFilter] = useState({ Male: true, Female: true, 'Non-binary': true });
-  const [maxDistance, setMaxDistance] = useState(2); // km
+  const [maxDistance, setMaxDistance] = useState(2); // km - default search radius
 
   useEffect(() => {
     (async () => {
