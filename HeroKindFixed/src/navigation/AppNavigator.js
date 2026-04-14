@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 
 // Auth screens
+import CoverScreen from '../screens/auth/CoverScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
@@ -34,7 +35,6 @@ const Tab = createBottomTabNavigator();
 
 const TAB_ICONS = {
   Map:         { active: 'map',                      inactive: 'map-outline' },
-  Nearby:      { active: 'people',                   inactive: 'people-outline' },
   Chat:        { active: 'chatbubble-ellipses',      inactive: 'chatbubble-ellipses-outline' },
   Leaderboard: { active: 'trophy',                   inactive: 'trophy-outline' },
   Games:       { active: 'game-controller',          inactive: 'game-controller-outline' },
@@ -43,7 +43,6 @@ const TAB_ICONS = {
 
 const TAB_LABELS = {
   Map: 'Map',
-  Nearby: 'Nearby',
   Chat: 'Chat',
   Leaderboard: 'Ranks',
   Games: 'Games',
@@ -77,7 +76,6 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Map" component={MapScreen} />
-      <Tab.Screen name="Nearby" component={NearbyListScreen} />
       <Tab.Screen name="Chat" component={ChatListScreen} />
       <Tab.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Tab.Screen name="Games" component={FarmerScreen} />
@@ -110,6 +108,7 @@ export default function AppNavigator() {
         <MainNavigator />
       ) : (
         <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+          <AuthStack.Screen name="Cover" component={CoverScreen} />
           <AuthStack.Screen name="Login" component={LoginScreen} />
           <AuthStack.Screen name="Register" component={RegisterScreen} />
           <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
