@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-   ScrollView,
+  ScrollView, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import { mockUser, mockReviews, mockNeeds, mockSupplies, mockTransactions } from '../data/mockData';
+import { mockUser, mockReviews, mockTransactions } from '../data/mockData';
+import { usePosts } from '../context/PostsContext';
 
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
@@ -23,8 +24,23 @@ const ACHIEVEMENTS = [
 
 export default function ProfileScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('reviews');
+  const { posts, removePost } = usePosts();
   const user = mockUser;
   const xpPercent = (user.xp / user.xpNext) * 100;
+
+  const myNeeds    = posts.filter(p => p.poster.id === user.id && p.type === 'need');
+  const mySupplies = posts.filter(p => p.poster.id === user.id && p.type === 'supply');
+
+  const handleDelete = (post) => {
+    Alert.alert(
+      'Delete Post',
+      `Remove "${post.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => removePost(post.id) },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -223,31 +239,53 @@ export default function ProfileScreen({ navigation }) {
           </View>
         ))}
 
-        {activeTab === 'needs' && mockNeeds.slice(0, 2).map(item => (
-          <View key={item.id} style={styles.historyCard}>
-            <View style={[styles.historyDot, { backgroundColor: colors.need }]} />
-            <View style={styles.historyBody}>
-              <Text style={styles.historyTitle}>{item.title}</Text>
-              <Text style={styles.historyMeta}>{item.category} · {item.timePosted}</Text>
+        {activeTab === 'needs' && (
+          myNeeds.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>🆘</Text>
+              <Text style={styles.emptyText}>No active requests</Text>
+              <Text style={styles.emptySub}>Tap + REQUEST HELP on the map to post one.</Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: colors.supplyLight }]}>
-              <Text style={[styles.statusText, { color: colors.supply }]}>Completed</Text>
+          ) : myNeeds.map(item => (
+            <View key={item.id} style={styles.historyCard}>
+              <View style={[styles.historyDot, { backgroundColor: colors.need }]} />
+              <View style={styles.historyBody}>
+                <Text style={styles.historyTitle}>{item.title}</Text>
+                <Text style={styles.historyMeta}>{item.category} · {item.timePosted}</Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: colors.needLight }]}>
+                <Text style={[styles.statusText, { color: colors.need }]}>Active</Text>
+              </View>
+              <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
+                <Ionicons name="trash-outline" size={16} color={colors.error} />
+              </TouchableOpacity>
             </View>
-          </View>
-        ))}
+          ))
+        )}
 
-        {activeTab === 'supply' && mockSupplies.slice(0, 2).map(item => (
-          <View key={item.id} style={styles.historyCard}>
-            <View style={[styles.historyDot, { backgroundColor: colors.supply }]} />
-            <View style={styles.historyBody}>
-              <Text style={styles.historyTitle}>{item.title}</Text>
-              <Text style={styles.historyMeta}>{item.category} · {item.timePosted}</Text>
+        {activeTab === 'supply' && (
+          mySupplies.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>📦</Text>
+              <Text style={styles.emptyText}>No active offers</Text>
+              <Text style={styles.emptySub}>Tap + REQUEST HELP on the map to offer something.</Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.statusText, { color: colors.primary }]}>Active</Text>
+          ) : mySupplies.map(item => (
+            <View key={item.id} style={styles.historyCard}>
+              <View style={[styles.historyDot, { backgroundColor: colors.supply }]} />
+              <View style={styles.historyBody}>
+                <Text style={styles.historyTitle}>{item.title}</Text>
+                <Text style={styles.historyMeta}>{item.category} · {item.timePosted}</Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: colors.supplyLight }]}>
+                <Text style={[styles.statusText, { color: colors.supply }]}>Active</Text>
+              </View>
+              <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
+                <Ionicons name="trash-outline" size={16} color={colors.error} />
+              </TouchableOpacity>
             </View>
-          </View>
-        ))}
+          ))
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -450,4 +488,10 @@ const styles = StyleSheet.create({
   historyMeta: { ...typography.caption, color: colors.textMuted },
   statusBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   statusText: { ...typography.caption, fontWeight: '700' },
+  deleteBtn: { padding: 6, marginLeft: 4 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
+  emptyEmoji: { fontSize: 40, marginBottom: 10 },
+  emptyText: { ...typography.h4, color: colors.textSecondary, marginBottom: 6 },
+  emptySub: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
 });
