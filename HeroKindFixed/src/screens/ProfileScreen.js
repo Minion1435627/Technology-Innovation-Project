@@ -200,15 +200,26 @@ export default function ProfileScreen({ navigation }) {
 
         {/* Content tabs */}
         <View style={styles.tabBar}>
-          {['reviews', 'needs', 'supply'].map(tab => (
+          {[
+            { key: 'reviews', label: 'Reviews', icon: 'star',         iconColor: '#FED330' },
+            { key: 'needs',   label: 'Needs',   icon: 'help-circle',  iconColor: colors.need },
+            { key: 'supply',  label: 'Supply',  icon: 'gift',         iconColor: colors.supply },
+          ].map(tab => (
             <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              onPress={() => setActiveTab(tab)}
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+              onPress={() => setActiveTab(tab.key)}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab === 'reviews' ? '⭐ Reviews' : tab === 'needs' ? '🆘 Needs' : '📦 Supply'}
-              </Text>
+              <View style={styles.tabInner}>
+                <Ionicons
+                  name={tab.icon}
+                  size={14}
+                  color={activeTab === tab.key ? tab.iconColor : colors.textMuted}
+                />
+                <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
+              </View>
             </TouchableOpacity>
           ))}
         </View>
@@ -242,7 +253,7 @@ export default function ProfileScreen({ navigation }) {
         {activeTab === 'needs' && (
           myNeeds.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🆘</Text>
+              <Ionicons name="help-circle" size={64} color={colors.need} style={{ marginBottom: 10 }} />
               <Text style={styles.emptyText}>No active requests</Text>
               <Text style={styles.emptySub}>Tap + REQUEST HELP on the map to post one.</Text>
             </View>
@@ -440,6 +451,7 @@ const styles = StyleSheet.create({
     flex: 1, paddingVertical: 12, alignItems: 'center',
     borderBottomWidth: 3, borderBottomColor: colors.transparent,
   },
+  tabInner: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   tabActive: { borderBottomColor: colors.primary },
   tabText: { ...typography.small, color: colors.textSecondary },
   tabTextActive: { color: colors.primary, fontWeight: '600' },

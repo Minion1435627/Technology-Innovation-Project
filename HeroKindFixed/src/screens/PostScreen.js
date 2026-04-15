@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { Ionicons } from '@expo/vector-icons';
 import { usePosts } from '../context/PostsContext';
 import { mockUser } from '../data/mockData';
 
@@ -112,8 +113,8 @@ export default function PostScreen({ navigation, route }) {
           {/* Type selector */}
           <View style={styles.typeSelector}>
             {[
-              { key: 'need', label: '🆘 I Need Help', color: colors.need, bg: colors.needLight },
-              { key: 'supply', label: '📦 I Want to Offer', color: colors.supply, bg: colors.supplyLight },
+              { key: 'need',   label: 'I Need Help',    icon: 'help-circle',  color: colors.need,   bg: colors.needLight },
+              { key: 'supply', label: 'I Want to Offer', icon: 'gift',         color: colors.supply, bg: colors.supplyLight },
             ].map(t => (
               <TouchableOpacity
                 key={t.key}
@@ -123,6 +124,12 @@ export default function PostScreen({ navigation, route }) {
                 ]}
                 onPress={() => setPostType(t.key)}
               >
+                <Ionicons
+                  name={t.icon}
+                  size={18}
+                  color={postType === t.key ? t.color : colors.textMuted}
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={[styles.typeBtnText, postType === t.key && { color: t.color }]}>
                   {t.label}
                 </Text>
@@ -311,7 +318,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
     borderColor: colors.border,
     backgroundColor: colors.card,

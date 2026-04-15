@@ -7,6 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 
+// Match CoverScreen palette
+const GREEN       = '#86A778';
+const GREEN_DARK  = '#41503C';
+const PAPER       = '#F4F0EA';
+const GREEN_LIGHT = '#E4EFD8';
+
 const SLIDES = [
   {
     emoji: '🗺️',
@@ -121,12 +127,12 @@ export default function OnboardingScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: PAPER },
   container: { flexGrow: 1, padding: 24, alignItems: 'center' },
 
   dots: { flexDirection: 'row', gap: 8, marginTop: 16, marginBottom: 40 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.border },
-  dotActive: { width: 24, backgroundColor: colors.primary },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#C8D4C0' },
+  dotActive: { width: 24, backgroundColor: GREEN },
 
   slideCard: {
     backgroundColor: colors.card,
@@ -146,16 +152,21 @@ const styles = StyleSheet.create({
   slideBody: { ...typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 24 },
 
   primaryBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: GREEN,
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 40,
     alignItems: 'center',
     width: '100%',
     marginBottom: 16,
+    shadowColor: '#506C48',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  primaryBtnText: { ...typography.button, color: colors.textWhite },
-  skipText: { ...typography.small, color: colors.textMuted, marginTop: 8 },
+  primaryBtnText: { ...typography.button, color: '#fff' },
+  skipText: { ...typography.small, color: '#8A9A82', marginTop: 8 },
 
   // Avatar
   avatarTitle: { ...typography.h2, color: colors.textPrimary, marginBottom: 8, alignSelf: 'flex-start' },
@@ -175,14 +186,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   avatarUploadBoxSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    borderColor: GREEN,
+    backgroundColor: GREEN_LIGHT,
   },
   uploadIcon: { fontSize: 40 },
   uploadText: { ...typography.bodyBold, color: colors.textPrimary },
   uploadSub: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
   avatarPreviewEmoji: { fontSize: 60 },
-  avatarPreviewText: { ...typography.h4, color: colors.primary },
+  avatarPreviewText: { ...typography.h4, color: GREEN_DARK },
   avatarPreviewSub: { ...typography.small, color: colors.textSecondary },
 
   examplesRow: { flexDirection: 'row', gap: 12, marginBottom: 8 },
@@ -209,11 +220,16 @@ const styles = StyleSheet.create({
   guidelinesTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: 12 },
   guidelinesText: { ...typography.body, color: colors.textSecondary, lineHeight: 26 },
   agreeBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: GREEN,
     borderRadius: 14,
     padding: 16,
     alignItems: 'center',
     marginTop: 16,
+    shadowColor: '#506C48',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  agreeBtnText: { ...typography.button, color: colors.textWhite },
+  agreeBtnText: { ...typography.button, color: '#fff' },
 });

@@ -192,7 +192,7 @@ export default function MapScreen({ navigation }) {
         <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>
           {/* Nearby list button */}
           <TouchableOpacity style={styles.nearbyBtn} onPress={() => setNearbyOpen(true)}>
-            <Ionicons name="people" size={20} color={colors.primary} />
+            <Ionicons name="people" size={20} color="#86A778" />
             <Text style={styles.nearbyBtnCount}>{visiblePins.length}</Text>
           </TouchableOpacity>
 
@@ -665,7 +665,7 @@ const styles = StyleSheet.create({
   },
   nearbyBtnCount: {
     position: 'absolute', top: 6, right: 6,
-    backgroundColor: colors.primary,
+    backgroundColor: '#86A778',
     color: '#fff', fontSize: 9, fontWeight: '800',
     borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1,
     overflow: 'hidden',
@@ -742,8 +742,13 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   requestBtn: {
-    backgroundColor: colors.primary, borderRadius: 14,
+    backgroundColor: '#86A778', borderRadius: 14,
     padding: 14, alignItems: 'center',
+    shadowColor: '#506C48',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
   requestBtnText: { ...typography.button, color: '#fff', letterSpacing: 0.5 },
 

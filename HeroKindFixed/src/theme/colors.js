@@ -1,8 +1,8 @@
 export const colors = {
   // Brand
-  primary: '#5B4FE9',
-  primaryLight: '#ECEAFD',
-  primaryDark: '#3D34B8',
+  primary: '#86A778',
+  primaryLight: '#E4EFD8',
+  primaryDark: '#41503C',
   accent: '#FF6B6B',
 
   // Map markers

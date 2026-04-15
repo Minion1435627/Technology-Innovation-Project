@@ -7,6 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 
+// Match CoverScreen palette
+const GREEN      = '#86A778';
+const GREEN_DARK = '#41503C';
+const PAPER      = '#F4F0EA';
+const GREEN_LIGHT = '#E4EFD8';
+
 const STEPS = ['Account', 'Profile', 'Verify'];
 
 export default function RegisterScreen({ navigation }) {
@@ -170,11 +176,11 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: PAPER },
   container: { flexGrow: 1, paddingBottom: 40 },
 
   backBtn: { padding: 16 },
-  backText: { ...typography.body, color: colors.primary },
+  backText: { ...typography.body, color: GREEN },
 
   progressBar: {
     flexDirection: 'row',
@@ -198,11 +204,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 4,
   },
-  progressDotActive: { backgroundColor: colors.primary },
+  progressDotActive: { backgroundColor: GREEN },
   progressNum: { fontSize: 13, fontWeight: '700', color: colors.textMuted },
-  progressNumActive: { color: colors.textWhite },
+  progressNumActive: { color: '#fff' },
   progressLabel: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
-  progressLabelActive: { color: colors.primary, fontWeight: '600' },
+  progressLabelActive: { color: GREEN_DARK, fontWeight: '600' },
   progressLine: {
     position: 'absolute',
     top: 16,
@@ -212,7 +218,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     zIndex: -1,
   },
-  progressLineActive: { backgroundColor: colors.primary },
+  progressLineActive: { backgroundColor: GREEN },
 
   card: {
     backgroundColor: colors.card,
@@ -241,12 +247,12 @@ const styles = StyleSheet.create({
   },
 
   infoBox: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: GREEN_LIGHT,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
   },
-  infoText: { ...typography.small, color: colors.primary },
+  infoText: { ...typography.small, color: GREEN_DARK },
 
   verifyCard: {
     backgroundColor: colors.background,
@@ -263,13 +269,18 @@ const styles = StyleSheet.create({
   skipText: { ...typography.small, color: colors.textMuted, textDecorationLine: 'underline' },
 
   primaryBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: GREEN,
     borderRadius: 14,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    shadowColor: '#506C48',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  primaryBtnText: { ...typography.button, color: colors.textWhite },
+  primaryBtnText: { ...typography.button, color: '#fff' },
 
   loginRow: {
     flexDirection: 'row',
@@ -277,5 +288,5 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   loginPrompt: { ...typography.body, color: colors.textSecondary },
-  loginLink: { ...typography.bodyBold, color: colors.primary },
+  loginLink: { ...typography.bodyBold, color: GREEN },
 });
