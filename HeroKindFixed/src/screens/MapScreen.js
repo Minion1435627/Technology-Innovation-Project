@@ -133,6 +133,13 @@ export default function MapScreen({ navigation }) {
   };
 
   const centre = userLocation ?? FALLBACK_LOCATION;
+
+  // Friends first (by distance), then Need/Supply (by distance)
+  const sortedForNearby = (pins) => [
+    ...pins.filter(p => p.type === 'friend').sort((a, b) => a.distanceKm - b.distanceKm),
+    ...pins.filter(p => p.type !== 'friend').sort((a, b) => a.distanceKm - b.distanceKm),
+  ];
+
   const visiblePins = MOCK_PINS.filter(p => {
     if (!filters[p.type]) return false;
     if (p.poster.gender && !genderFilter[p.poster.gender]) return false;
@@ -256,16 +263,77 @@ export default function MapScreen({ navigation }) {
             <View style={styles.nearbySheetHeader}>
               <Ionicons name="people" size={18} color={colors.primary} />
               <Text style={styles.nearbySheetTitle}>NEARBY HELPERS</Text>
-              <Text style={styles.nearbySheetSub}>Sorted by Distance</Text>
+              <Text style={styles.nearbySheetSub}>Friends · then by distance</Text>
               <TouchableOpacity onPress={() => setNearbyOpen(false)} style={{ marginLeft: 'auto' }}>
                 <Ionicons name="close" size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
+            {/* Filters — all synced with map */}
+            <TouchableOpacity activeOpacity={1}>
+              {/* Radius */}
+              <View style={styles.nearbyDistRow}>
+                <Text style={styles.nearbyDistLabel}>Radius</Text>
+                {DISTANCE_OPTIONS.map(d => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.nearbyDistChip, maxDistance === d && { backgroundColor: colors.primary }]}
+                    onPress={() => setMaxDistance(d)}
+                  >
+                    <Text style={[styles.nearbyDistChipText, maxDistance === d && { color: '#fff' }]}>
+                      {d < 1 ? `${d * 1000}m` : `${d} km`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Post type */}
+              <View style={styles.nearbyDistRow}>
+                <Text style={styles.nearbyDistLabel}>Type</Text>
+                {[
+                  { key: 'need',   label: 'Need',   color: colors.need },
+                  { key: 'supply', label: 'Supply', color: colors.supply },
+                  { key: 'friend', label: 'Friend', color: colors.friend },
+                ].map(item => (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[styles.nearbyDistChip, { borderColor: item.color }, filters[item.key] && { backgroundColor: item.color }]}
+                    onPress={() => setFilters(f => ({ ...f, [item.key]: !f[item.key] }))}
+                  >
+                    <Text style={[styles.nearbyDistChipText, { color: item.color }, filters[item.key] && { color: '#fff' }]}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Gender */}
+              <View style={[styles.nearbyDistRow, { borderBottomWidth: 0, marginBottom: 0 }]}>
+                <Text style={styles.nearbyDistLabel}>Gender</Text>
+                {[
+                  { key: 'Male',       label: '♂', color: GENDER_COLOR['Male'] },
+                  { key: 'Female',     label: '♀', color: GENDER_COLOR['Female'] },
+                  { key: 'Non-binary', label: '⚧', color: GENDER_COLOR['Non-binary'] },
+                ].map(item => (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[styles.nearbyDistChip, { borderColor: item.color }, genderFilter[item.key] && { backgroundColor: item.color }]}
+                    onPress={() => setGenderFilter(f => ({ ...f, [item.key]: !f[item.key] }))}
+                  >
+                    <Text style={[styles.nearbyDistChipText, { color: item.color }, genderFilter[item.key] && { color: '#fff' }]}>
+                      {item.label} {item.key === 'Non-binary' ? 'NB' : item.key}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </TouchableOpacity>
+
+            <View style={{ height: 1, backgroundColor: colors.border, marginBottom: 4 }} />
+
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
               {visiblePins.length === 0 ? (
                 <Text style={styles.nearbyEmpty}>No posts match your current filters.</Text>
-              ) : visiblePins.map(pin => (
+              ) : sortedForNearby(visiblePins).map(pin => (
                 <TouchableOpacity
                   key={pin.id}
                   style={styles.sheetRow}
@@ -393,16 +461,19 @@ export default function MapScreen({ navigation }) {
             {/* Post type filters */}
             <Text style={styles.filterSectionLabel}>POST TYPE</Text>
             {[
-              { key: 'need',   label: '🔴 Need Help posts' },
-              { key: 'supply', label: '🟢 Supply / Offer posts' },
-              { key: 'friend', label: '🔵 Friends & Top Helpers' },
+              { key: 'need',   icon: 'help-circle',   color: colors.need,   label: 'Need Help posts' },
+              { key: 'supply', icon: 'gift',           color: colors.supply, label: 'Supply / Offer posts' },
+              { key: 'friend', icon: 'people',           color: colors.friend, label: 'Friends & Top Helpers' },
             ].map(item => (
               <TouchableOpacity
                 key={item.key}
                 style={styles.filterRow}
                 onPress={() => setFilters(f => ({ ...f, [item.key]: !f[item.key] }))}
               >
-                <Text style={styles.filterRowLabel}>{item.label}</Text>
+                <View style={styles.filterRowLeft}>
+                  <Ionicons name={item.icon} size={20} color={item.color} />
+                  <Text style={styles.filterRowLabel}>{item.label}</Text>
+                </View>
                 <View style={[styles.toggle, filters[item.key] && { backgroundColor: colors.primary }]}>
                   <View style={[styles.toggleThumb, filters[item.key] && styles.toggleThumbOn]} />
                 </View>
@@ -515,7 +586,7 @@ const styles = StyleSheet.create({
   locationLoadingText: { ...typography.small, color: colors.textSecondary },
 
   recenterBtn: {
-    position: 'absolute', bottom: 210, right: 16,
+    position: 'absolute', bottom: 80, right: 16,
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
@@ -605,6 +676,18 @@ const styles = StyleSheet.create({
   nearbySheetTitle: { ...typography.smallBold, color: colors.textPrimary, letterSpacing: 0.5 },
   nearbySheetSub: { ...typography.caption, color: colors.textSecondary },
   nearbyEmpty: { ...typography.body, color: colors.textMuted, textAlign: 'center', paddingVertical: 32 },
+  nearbyDistRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+    marginBottom: 4,
+  },
+  nearbyDistLabel: { ...typography.caption, color: colors.textSecondary, fontWeight: '700', marginRight: 2 },
+  nearbyDistChip: {
+    borderRadius: 20, borderWidth: 1, borderColor: colors.primary,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  nearbyDistChipText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
 
   handleBar: {
     width: 40, height: 4, backgroundColor: colors.border,
@@ -724,6 +807,7 @@ const styles = StyleSheet.create({
   },
   genderChipText: { ...typography.smallBold, color: colors.textPrimary },
   filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  filterRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   filterRowLabel: { ...typography.body, color: colors.textPrimary },
   toggle: {
     width: 48, height: 28, borderRadius: 14,
