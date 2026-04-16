@@ -22,6 +22,7 @@ import ChatListScreen from '../screens/ChatListScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import PostScreen from '../screens/PostScreen';
+import PostDetailScreen from '../screens/PostDetailScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import TransactionScreen from '../screens/TransactionScreen';
@@ -90,6 +91,7 @@ function MainNavigator() {
     <MainStack.Navigator screenOptions={{ headerShown: false }}>
       <MainStack.Screen name="Tabs" component={MainTabs} />
       <MainStack.Screen name="Post" component={PostScreen} options={{ presentation: 'modal' }} />
+      <MainStack.Screen name="PostDetail" component={PostDetailScreen} />
       <MainStack.Screen name="ChatDetail" component={ChatScreen} />
       <MainStack.Screen name="Farmer" component={FarmerScreen} />
       <MainStack.Screen name="Fisher" component={FisherScreen} />
