@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { PostsProvider } from '../context/PostsContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -103,18 +104,20 @@ export default function AppNavigator() {
   const isLoggedIn = false;
 
   return (
-    <NavigationContainer>
-      {isLoggedIn ? (
-        <MainNavigator />
-      ) : (
-        <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-          <AuthStack.Screen name="Cover" component={CoverScreen} />
-          <AuthStack.Screen name="Login" component={LoginScreen} />
-          <AuthStack.Screen name="Register" component={RegisterScreen} />
-          <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
-          <AuthStack.Screen name="Main" component={MainNavigator} />
-        </AuthStack.Navigator>
-      )}
-    </NavigationContainer>
+    <PostsProvider>
+      <NavigationContainer>
+        {isLoggedIn ? (
+          <MainNavigator />
+        ) : (
+          <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+            <AuthStack.Screen name="Cover" component={CoverScreen} />
+            <AuthStack.Screen name="Login" component={LoginScreen} />
+            <AuthStack.Screen name="Register" component={RegisterScreen} />
+            <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
+            <AuthStack.Screen name="Main" component={MainNavigator} />
+          </AuthStack.Navigator>
+        )}
+      </NavigationContainer>
+    </PostsProvider>
   );
 }

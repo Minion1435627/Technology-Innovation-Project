@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View, Text, TouchableOpacity, StyleSheet, Alert,
   TextInput, Modal, ScrollView, Dimensions, ActivityIndicator,
 } from 'react-native';
 import * as Location from 'expo-location';
@@ -11,22 +11,8 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import UrgencyBadge from '../components/UrgencyBadge';
-
-
-// Pins centred near Docklands / Marvel Stadium (-37.8144, 144.9398)
-const MOCK_PINS = [
-  { id: 'n1', type: 'need',   latitude: -37.8130, longitude: 144.9420, title: 'Need a screwdriver for IKEA shelf',       poster: { id: 'u2', name: 'Mia L.',    level: 2, gender: 'Female',     stars: 4.6 }, urgency: 'High', category: 'Borrow an item',  description: 'Moving into a new place — need a Phillips screwdriver for about 30 mins. Happy to come to you!', timePosted: '5 min ago' },
-  { id: 'n2', type: 'need',   latitude: -37.8160, longitude: 144.9450, title: 'Help carrying boxes up 3 flights',         poster: { id: 'u3', name: 'James W.',  level: 1, gender: 'Male',       stars: 4.9 }, urgency: 'ASAP', category: 'Physical help',   description: 'Moving day! Need 2 people for about an hour. Will shout pizza and drinks.', timePosted: '12 min ago' },
-  { id: 'n3', type: 'need',   latitude: -37.8115, longitude: 144.9370, title: 'Borrow a bicycle pump',                    poster: { id: 'u4', name: 'Sophie K.', level: 4, gender: 'Female',     stars: 5.0 }, urgency: 'Medium', category: 'Borrow an item', description: 'Flat tyre before uni — just need a pump for a minute.', timePosted: '20 min ago' },
-  { id: 'n4', type: 'need',   latitude: -37.8175, longitude: 144.9340, title: 'Help with Python assignment',               poster: { id: 'u5', name: 'Ryo T.',    level: 2, gender: 'Male',       stars: 4.3 }, urgency: 'Low',  category: 'Study / Skills', description: 'Stuck on a pandas data cleaning task. Can anyone spare 30 mins over video call?', timePosted: '1 hr ago' },
-  { id: 'n5', type: 'need',   latitude: -37.8095, longitude: 144.9435, title: 'Need someone to walk my dog',               poster: { id: 'u9', name: 'Lena B.',   level: 2, gender: 'Female',     stars: 4.7 }, urgency: 'Medium', category: 'Pet care',       description: 'Away for the afternoon, dog needs a 30-min walk around the waterfront.', timePosted: '35 min ago' },
-  { id: 's1', type: 'supply', latitude: -37.8138, longitude: 144.9408, title: 'Offering drill + full toolset',             poster: { id: 'u6', name: 'David M.', level: 3, gender: 'Male',       stars: 4.7 }, category: 'Lend an item',   description: 'Happy to lend my drill, screwdrivers, and hammer. Available Sat–Sun. Please return Sunday night.', availability: 'Sat–Sun this weekend', timePosted: '15 min ago' },
-  { id: 's2', type: 'supply', latitude: -37.8155, longitude: 144.9385, title: 'Free leftover Thai food',                   poster: { id: 'u7', name: 'Nara P.',  level: 2, gender: 'Female',     stars: 4.9 }, category: 'Share food',     description: 'Made too much dinner. Come grab some before 9pm tonight!', availability: 'Tonight until 9 PM', timePosted: '30 min ago' },
-  { id: 's3', type: 'supply', latitude: -37.8120, longitude: 144.9460, title: 'Can help with React / JS questions',        poster: { id: 'u8', name: 'Emma R.',  level: 3, gender: 'Female',     stars: 4.8 }, category: 'Offer skills',   description: '3rd year CS student. Happy to help with frontend questions this afternoon.', availability: 'Today 2–6 PM', timePosted: '45 min ago' },
-  { id: 's4', type: 'supply', latitude: -37.8108, longitude: 144.9395, title: 'Giving away houseplants',                   poster: { id: 'u10', name: 'Omar S.', level: 1, gender: 'Male',       stars: 4.5 }, category: 'Free item',      description: 'Moving out and can\'t take my plants. Free to good homes — pothos, spider plant, snake plant.', availability: 'This weekend', timePosted: '2 hrs ago' },
-  { id: 'f1', type: 'friend', latitude: -37.8148, longitude: 144.9428, title: 'Emma R. is nearby',                         poster: { id: 'u8', name: 'Emma R.',  level: 3, gender: 'Female',     stars: 4.8 }, category: 'Friend',         description: 'Emma is a trusted neighbour — she has helped 12 people this month!', timePosted: 'online now' },
-  { id: 'f2', type: 'friend', latitude: -37.8125, longitude: 144.9352, title: 'David M. is nearby',                        poster: { id: 'u6', name: 'David M.', level: 4, gender: 'Male',       stars: 4.7 }, category: 'Friend',         description: 'David is a Community Pillar — top helper this week with 380 pts!', timePosted: '10 min ago' },
-];
+import { usePosts } from '../context/PostsContext';
+import { mockUser } from '../data/mockData';
 
 // Distance options in km
 const DISTANCE_OPTIONS = [0.5, 1, 2, 5];
@@ -97,6 +83,7 @@ function PinMarker({ pin }) {
 export default function MapScreen({ navigation }) {
   const insets  = useSafeAreaInsets();
   const mapRef  = useRef(null);
+  const { posts, removePost } = usePosts();
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [nearbyOpen, setNearbyOpen] = useState(false);
@@ -140,7 +127,8 @@ export default function MapScreen({ navigation }) {
     ...pins.filter(p => p.type !== 'friend').sort((a, b) => a.distanceKm - b.distanceKm),
   ];
 
-  const visiblePins = MOCK_PINS.filter(p => {
+  const visiblePins = posts.filter(p => {
+    if (p.expiresAt && Date.now() > p.expiresAt) return false;
     if (!filters[p.type]) return false;
     if (p.poster.gender && !genderFilter[p.poster.gender]) return false;
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
@@ -185,7 +173,7 @@ export default function MapScreen({ navigation }) {
               coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
               anchor={{ x: 0.5, y: 1 }}
               onPress={() => setTooltip(pin)}
-              tracksViewChanges={false}
+              tracksViewChanges={pin.id.startsWith('post_')}
             >
               <PinMarker pin={pin} />
             </Marker>
@@ -204,7 +192,7 @@ export default function MapScreen({ navigation }) {
         <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>
           {/* Nearby list button */}
           <TouchableOpacity style={styles.nearbyBtn} onPress={() => setNearbyOpen(true)}>
-            <Ionicons name="people" size={20} color={colors.primary} />
+            <Ionicons name="people" size={20} color="#86A778" />
             <Text style={styles.nearbyBtnCount}>{visiblePins.length}</Text>
           </TouchableOpacity>
 
@@ -249,7 +237,7 @@ export default function MapScreen({ navigation }) {
 
         {/* ── Fixed REQUEST HELP button — pinned above tab bar ── */}
         <View style={styles.fixedRequestBtn}>
-          <TouchableOpacity style={styles.requestBtn} onPress={() => navigation.navigate('Post')}>
+          <TouchableOpacity style={styles.requestBtn} onPress={() => navigation.navigate('Post', { userLocation: userLocation ?? FALLBACK_LOCATION })}>
             <Text style={styles.requestBtnText}>+ REQUEST HELP</Text>
           </TouchableOpacity>
         </View>
@@ -431,20 +419,43 @@ export default function MapScreen({ navigation }) {
 
               {/* Actions */}
               <View style={styles.tooltipActions}>
-                <TouchableOpacity
-                  style={styles.tooltipContactBtn}
-                  onPress={() => {
-                    setTooltip(null);
-                    navigation.navigate('ChatDetail', {
-                      chat: { user: { id: tooltip.poster.id, name: tooltip.poster.name }, postTitle: tooltip.title }
-                    });
-                  }}
-                >
-                  <Text style={styles.tooltipContactText}>💬 Contact</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.tooltipFriendBtn}>
-                  <Text style={styles.tooltipFriendText}>+ Add Friend</Text>
-                </TouchableOpacity>
+                {tooltip.poster.id === mockUser.id ? (
+                  <TouchableOpacity
+                    style={styles.tooltipDeleteBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Post',
+                        'Are you sure you want to remove this post?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Delete', style: 'destructive',
+                            onPress: () => { removePost(tooltip.id); setTooltip(null); },
+                          },
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={styles.tooltipDeleteText}>🗑 Delete Post</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.tooltipContactBtn}
+                      onPress={() => {
+                        setTooltip(null);
+                        navigation.navigate('ChatDetail', {
+                          chat: { user: { id: tooltip.poster.id, name: tooltip.poster.name }, postTitle: tooltip.title }
+                        });
+                      }}
+                    >
+                      <Text style={styles.tooltipContactText}>💬 Contact</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.tooltipFriendBtn}>
+                      <Text style={styles.tooltipFriendText}>+ Add Friend</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </View>
           )}
@@ -654,7 +665,7 @@ const styles = StyleSheet.create({
   },
   nearbyBtnCount: {
     position: 'absolute', top: 6, right: 6,
-    backgroundColor: colors.primary,
+    backgroundColor: '#86A778',
     color: '#fff', fontSize: 9, fontWeight: '800',
     borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1,
     overflow: 'hidden',
@@ -731,8 +742,13 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   requestBtn: {
-    backgroundColor: colors.primary, borderRadius: 14,
+    backgroundColor: '#86A778', borderRadius: 14,
     padding: 14, alignItems: 'center',
+    shadowColor: '#506C48',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
   requestBtnText: { ...typography.button, color: '#fff', letterSpacing: 0.5 },
 
@@ -792,6 +808,11 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 14, alignItems: 'center',
   },
   tooltipFriendText: { ...typography.button, color: colors.primary },
+  tooltipDeleteBtn: {
+    flex: 1, backgroundColor: colors.error + '15', borderWidth: 1.5,
+    borderColor: colors.error, borderRadius: 14, padding: 14, alignItems: 'center',
+  },
+  tooltipDeleteText: { ...typography.button, color: colors.error },
 
   // Filter
   filterSheet: {

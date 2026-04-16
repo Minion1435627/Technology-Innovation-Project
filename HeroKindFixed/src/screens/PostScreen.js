@@ -1,16 +1,27 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-   ScrollView, KeyboardAvoidingView, Platform,
+   ScrollView, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { Ionicons } from '@expo/vector-icons';
+import { usePosts } from '../context/PostsContext';
+import { mockUser } from '../data/mockData';
 
 const NEED_CATEGORIES = ['Borrow an item', 'Physical help', 'Food sharing', 'Study/skills', 'Custom'];
 const SUPPLY_CATEGORIES = ['Lend an item', 'Physical help', 'Share food', 'Offer skills', 'Custom'];
 const URGENCIES = ['Low', 'Medium', 'High', 'ASAP'];
 const EXPIRY_OPTIONS = ['2 hours', '6 hours', '1 day', '3 days', '7 days'];
+
+const EXPIRY_MS = {
+  '2 hours':  2 * 60 * 60 * 1000,
+  '6 hours':  6 * 60 * 60 * 1000,
+  '1 day':   24 * 60 * 60 * 1000,
+  '3 days':  3 * 24 * 60 * 60 * 1000,
+  '7 days':  7 * 24 * 60 * 60 * 1000,
+};
 const URGENCY_COLOR = {
   Low: colors.urgencyLow,
   Medium: colors.urgencyMedium,
@@ -18,7 +29,8 @@ const URGENCY_COLOR = {
   ASAP: colors.urgencyAsap,
 };
 
-export default function PostScreen({ navigation }) {
+export default function PostScreen({ navigation, route }) {
+  const { addPost } = usePosts();
   const [postType, setPostType] = useState('need'); // 'need' | 'supply'
   const [form, setForm] = useState({
     title: '',
@@ -37,6 +49,45 @@ export default function PostScreen({ navigation }) {
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
+  const FALLBACK = { latitude: -37.8144, longitude: 144.9398 };
+
+  const handlePublish = () => {
+    if (!form.title.trim()) {
+      Alert.alert('Missing title', 'Please add a title before publishing.');
+      return;
+    }
+    if (!form.category) {
+      Alert.alert('Missing category', 'Please select a category.');
+      return;
+    }
+
+    const coords = route.params?.userLocation ?? FALLBACK;
+
+    const newPost = {
+      id: `post_${Date.now()}`,
+      type: postType,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      title: form.title.trim(),
+      description: form.description.trim(),
+      category: form.category === 'Custom' ? form.customCategory || 'Custom' : form.category,
+      urgency: postType === 'need' ? form.urgency : undefined,
+      availability: postType === 'supply' ? form.availability : undefined,
+      poster: {
+        id: mockUser.id,
+        name: mockUser.name,
+        level: mockUser.level,
+        gender: mockUser.gender,
+        stars: mockUser.stars,
+      },
+      timePosted: 'just now',
+      expiresAt: Date.now() + (EXPIRY_MS[form.expiry] ?? EXPIRY_MS['7 days']),
+    };
+
+    addPost(newPost);
+    navigation.goBack();
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
@@ -51,7 +102,7 @@ export default function PostScreen({ navigation }) {
           <Text style={styles.headerTitle}>New Post</Text>
           <TouchableOpacity
             style={[styles.publishBtn, { backgroundColor: accentColor }]}
-            onPress={() => navigation.goBack()}
+            onPress={handlePublish}
           >
             <Text style={styles.publishText}>Publish</Text>
           </TouchableOpacity>
@@ -62,8 +113,8 @@ export default function PostScreen({ navigation }) {
           {/* Type selector */}
           <View style={styles.typeSelector}>
             {[
-              { key: 'need', label: '🆘 I Need Help', color: colors.need, bg: colors.needLight },
-              { key: 'supply', label: '📦 I Want to Offer', color: colors.supply, bg: colors.supplyLight },
+              { key: 'need',   label: 'I Need Help',    icon: 'help-circle',  color: colors.need,   bg: colors.needLight },
+              { key: 'supply', label: 'I Want to Offer', icon: 'gift',         color: colors.supply, bg: colors.supplyLight },
             ].map(t => (
               <TouchableOpacity
                 key={t.key}
@@ -73,6 +124,12 @@ export default function PostScreen({ navigation }) {
                 ]}
                 onPress={() => setPostType(t.key)}
               >
+                <Ionicons
+                  name={t.icon}
+                  size={18}
+                  color={postType === t.key ? t.color : colors.textMuted}
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={[styles.typeBtnText, postType === t.key && { color: t.color }]}>
                   {t.label}
                 </Text>
@@ -261,7 +318,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
     borderColor: colors.border,
     backgroundColor: colors.card,
