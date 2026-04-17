@@ -29,6 +29,7 @@ import UserProfileScreen from '../screens/UserProfileScreen';
 import TransactionScreen from '../screens/TransactionScreen';
 
 // Mini-games
+import GamesScreen from '../screens/GamesScreen';
 import FarmerScreen from '../screens/minigames/FarmerScreen';
 import FisherScreen from '../screens/minigames/FisherScreen';
 
@@ -81,7 +82,7 @@ function MainTabs() {
       <Tab.Screen name="Map" component={MapScreen} />
       <Tab.Screen name="Chat" component={ChatListScreen} />
       <Tab.Screen name="Leaderboard" component={LeaderboardScreen} />
-      <Tab.Screen name="Games" component={FarmerScreen} />
+      <Tab.Screen name="Games" component={GamesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

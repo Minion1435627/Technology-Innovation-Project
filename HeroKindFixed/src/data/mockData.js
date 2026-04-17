@@ -220,7 +220,7 @@ export const mockOtherUsers = {
 };
 
 
-// The below  two part need to modify
+// Marker in the map
 export const mockNeeds = [
   {
     id: 'n1',
@@ -409,6 +409,7 @@ export const mockSupplies = [
   },
 ];
 
+// Mock data for the list in Chat tab
 export const mockChats = [
   {
     id: 'c4',
@@ -480,6 +481,7 @@ export const mockLeaderboard = [
   { rank: 8, id: 'u5', name: 'Ryo T.', score: 78, level: 2, stars: 4.3, neighbourhood: 'Collingwood' },
 ];
 
+//Mock Review in the UserProfile
 export const mockReviews = [
   {
     id: 'r1',

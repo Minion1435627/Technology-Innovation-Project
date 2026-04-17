@@ -175,29 +175,6 @@ export default function ProfileScreen({ navigation }) {
           </View>
         )}
 
-        {/* Mini-game shortcuts */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mini-Games</Text>
-          <View style={styles.gamesRow}>
-            <TouchableOpacity
-              style={styles.gameCard}
-              onPress={() => navigation.navigate('Farmer')}
-            >
-              <Text style={styles.gameEmoji}>🌾</Text>
-              <Text style={styles.gameTitle}>Farmer</Text>
-              <Text style={styles.gameSub}>1 crop ready!</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.gameCard}
-              onPress={() => navigation.navigate('Fisher')}
-            >
-              <Text style={styles.gameEmoji}>🎣</Text>
-              <Text style={styles.gameTitle}>Fisher</Text>
-              <Text style={styles.gameSub}>Cast a line</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Content tabs */}
         <View style={styles.tabBar}>
           {[
@@ -419,24 +396,6 @@ const styles = StyleSheet.create({
   achieveEmoji: { fontSize: 28 },
   achieveLabel: { ...typography.smallBold, color: colors.textPrimary, textAlign: 'center' },
   achieveDesc: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
-
-  gamesRow: { flexDirection: 'row', gap: 12 },
-  gameCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  gameEmoji: { fontSize: 36 },
-  gameTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  gameSub: { ...typography.small, color: colors.textSecondary },
 
   tabBar: {
     flexDirection: 'row',
