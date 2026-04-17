@@ -75,12 +75,6 @@ const getLevelFromScore = (score) => {
   ), 1);
 };
 
-const getFishRequirementText = (fish) => {
-  const rod = RODS.find(item => item.power >= fish.rodPower);
-  const baitNames = fish.baits.map(key => BAITS.find(bait => bait.key === key)?.name).filter(Boolean);
-  return `Lv.${fish.level} · ${rod?.name || 'Better Rod'} · ${baitNames.join('/')}`;
-};
-
 const pickWeighted = (items, getWeight) => {
   const totalWeight = items.reduce((sum, item) => sum + getWeight(item), 0);
   if (totalWeight <= 0) return null;
@@ -117,6 +111,10 @@ export default function FisherScreen({ navigation }) {
   const caughtSpeciesCount = Object.values(collection).filter(count => count > 0).length;
   const totalCaught = Object.values(collection).reduce((sum, count) => sum + count, 0);
   const basketCount = Object.values(fishBasket).reduce((sum, count) => sum + count, 0);
+  const catchChance = Math.min(
+    0.92,
+    0.54 + (playerLevel * 0.035) + selectedRod.catchBonus + selectedBait.catchBonus
+  );
   const basketItems = FISH_SPECIES
     .map(fish => ({ ...fish, count: fishBasket[fish.id] || 0 }))
     .filter(fish => fish.count > 0);
@@ -160,15 +158,10 @@ export default function FisherScreen({ navigation }) {
     bobAnim.stopAnimation();
     bobAnim.setValue(0);
 
-    const catchChance = Math.min(
-      0.92,
-      0.54 + (playerLevel * 0.035) + selectedRod.catchBonus + selectedBait.catchBonus
-    );
-
     if (Math.random() > catchChance) {
       setGameState('miss');
       setMessage('The fish slipped away. Try a stronger rod or better bait.');
-      setTimeout(() => setGameState('idle'), 1400);
+      setTimeout(() => setGameState('idle'), 2200);
       return;
     }
 
@@ -278,7 +271,7 @@ export default function FisherScreen({ navigation }) {
           <View style={styles.levelCard}>
             <View>
               <Text style={styles.levelTitle}>Level {playerLevel} · {levelName}</Text>
-              <Text style={styles.levelTextBody}>Higher level, better rods, and premium bait increase rare fish chances.</Text>
+              <Text style={styles.levelTextBody}>Higher level, better rods, and premium bait lower miss chance and improve rare catches.</Text>
             </View>
             <Ionicons name="sparkles-outline" size={20} color="#b58935" />
           </View>
@@ -288,15 +281,12 @@ export default function FisherScreen({ navigation }) {
               <View style={styles.scenePill}>
                 <Text style={styles.scenePillText}>Morning Lake</Text>
               </View>
-              <View style={styles.scenePill}>
-                <Text style={styles.scenePillText}>{eligibleFish.length} possible</Text>
-              </View>
             </View>
             <View style={styles.rulesCard}>
               <Text style={styles.rulesTitle}>Rules</Text>
               <Text style={styles.rulesText}>1. Pick bait and rod</Text>
               <Text style={styles.rulesText}>2. Cast into one spot</Text>
-              <Text style={styles.rulesText}>3. Reel before it slips</Text>
+              <Text style={styles.rulesText}>3. Reel, but fish can miss</Text>
               <Text style={styles.rulesText}>4. Fill collection book</Text>
             </View>
             <View style={styles.avatarDock}>
@@ -450,12 +440,12 @@ export default function FisherScreen({ navigation }) {
                 <View style={styles.fishGrid}>
                   {rarityFish.map(fish => {
                     const caught = collection[fish.id] || 0;
-                    const visible = caught > 0 || fish.level <= playerLevel;
+                    const visible = caught > 0;
                     return (
                       <View key={fish.id} style={[styles.fishCard, caught > 0 && { borderColor: RARITY_COLORS[fish.rarity] }]}>
                         <Text style={[styles.fishEmoji, !visible && styles.hiddenFish]}>{visible ? fish.emoji : '❓'}</Text>
                         <Text style={styles.fishName}>{visible ? fish.name : 'Unknown'}</Text>
-                        <Text style={styles.fishMeta}>{caught > 0 ? `Caught ×${caught}` : getFishRequirementText(fish)}</Text>
+                        <Text style={styles.fishMeta}>{caught > 0 ? `Caught ×${caught}` : 'Not caught yet'}</Text>
                       </View>
                     );
                   })}
@@ -670,7 +660,7 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
   fisherImage: {
-    width: 500,
+    width: 490,
     height: 400,
   },
   waterSpot: {
