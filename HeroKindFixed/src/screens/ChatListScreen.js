@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { mockChats } from '../data/mockData';
+import { useChats } from '../context/ChatContext';
 
 const EXCHANGE_META = {
   c1: {
@@ -130,8 +130,9 @@ function getChatPriority(chat) {
 }
 
 export default function ChatListScreen({ navigation }) {
+  const { chats } = useChats();
   const enhancedChats = useMemo(() => {
-    return [...mockChats]
+    return [...chats]
       .map(chat => ({
         ...chat,
         exchange: EXCHANGE_META[chat.id] ?? null,
@@ -142,7 +143,7 @@ export default function ChatListScreen({ navigation }) {
         if ((b.unread ?? 0) !== (a.unread ?? 0)) return (b.unread ?? 0) - (a.unread ?? 0);
         return a.user.name.localeCompare(b.user.name);
       });
-  }, []);
+  }, [chats]);
 
   const activeCount = enhancedChats.filter(chat => chat.exchange).length;
   const unreadCount = enhancedChats.filter(chat => chat.unread > 0).length;

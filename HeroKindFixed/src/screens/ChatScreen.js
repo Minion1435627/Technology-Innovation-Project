@@ -8,7 +8,8 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import { mockMessages } from '../data/mockData';
+import { CHAT_MESSAGE_SCENARIOS } from '../data/mockData';
+import { useChats } from '../context/ChatContext';
 
 const ATTACHMENT_PROOF_OPTIONS = [
   { id: 'general', label: 'General photo' },
@@ -354,63 +355,7 @@ const mergeLifecycleIntoMessages = (messageList, lifecycle) => {
   return merged;
 };
 
-const CHAT_MESSAGE_SCENARIOS = {
-  c4: [
-    { id: 'c4_m1', sender: 'them', text: 'Hi Alex, I saw your question about React state handling.', time: '1:10 PM', read: true },
-    { id: 'c4_m2', sender: 'me', text: 'Yes please, I am stuck on how to structure the chat flow.', time: '1:12 PM', read: true },
-    { id: 'c4_m3', sender: 'them', text: 'No problem. We can do a short help session later today if that works for you.', time: '1:14 PM', read: true },
-    { id: 'c4_m4', sender: 'me', text: 'That would be amazing. Maybe around 4pm?', time: '1:16 PM', read: true },
-    { id: 'c4_m5', sender: 'them', text: '4pm works. Once we are both ready, you can start the exchange flow in chat.', time: '1:18 PM', read: false },
-  ],
-  c5: [
-    { id: 'c5_m1', sender: 'them', text: 'Hi, is the screwdriver still available to borrow today?', time: '9:02 AM', read: true },
-    { id: 'c5_m2', sender: 'me', text: 'Yes, I can lend it to you this afternoon.', time: '9:05 AM', read: true },
-    { id: 'c5_m3', sender: 'them', text: 'Perfect. I only need it for one shelf, so I should be quick.', time: '9:06 AM', read: true },
-    { id: 'c5_m4', sender: 'me', text: 'Sounds good. Let us meet downstairs at 2pm.', time: '9:08 AM', read: true },
-    { id: 'c5_m5', sender: 'them', text: 'Great, message me once you are there and I will come down.', time: '9:09 AM', read: false },
-  ],
-  c6: [
-    { id: 'c6_m1', sender: 'them', text: 'Thanks again for lending the screwdriver yesterday.', time: '10:15 AM', read: true },
-    { id: 'c6_m2', sender: 'me', text: 'No worries. The return timer should already be running in the app.', time: '10:18 AM', read: true },
-    { id: 'c6_m3', sender: 'them', text: 'Yes, I can see it. I have finished the shelf and will return it this evening.', time: '10:20 AM', read: true },
-    { id: 'c6_m4', sender: 'me', text: 'Perfect. Just leave it with the concierge and send me a message after.', time: '10:22 AM', read: true },
-    { id: 'c6_m5', sender: 'them', text: 'Done, I left it there a minute ago. Could you confirm when you pick it up?', time: '10:29 AM', read: false },
-  ],
-  c7: [
-    { id: 'c7_m1', sender: 'them', text: 'Hi Alex, I am ready to go through your React component now.', time: '3:00 PM', read: true },
-    { id: 'c7_m2', sender: 'me', text: 'Amazing, thank you. I mainly need help with the chat and exchange states.', time: '3:02 PM', read: true },
-    { id: 'c7_m3', sender: 'them', text: 'Let us start with the flow first, then we can polish the UI text after.', time: '3:04 PM', read: true },
-    { id: 'c7_m4', sender: 'me', text: 'Perfect. I have my simulator open so I can test while we talk.', time: '3:06 PM', read: true },
-    { id: 'c7_m5', sender: 'them', text: 'Great, the task has started on my side. We should be able to finish within the next two hours.', time: '3:08 PM', read: false },
-  ],
-  c8: [
-    { id: 'c8_m1', sender: 'them', text: 'Hi Alex, is the screwdriver still available to borrow for my shelf build?', time: '09 Apr, 4:55 PM', read: true },
-    { id: 'c8_m2', sender: 'me', text: 'Yes, that works. I can lend it to you this evening if you still need it.', time: '09 Apr, 5:08 PM', read: true },
-    { id: 'c8_m3', sender: 'them', text: 'Perfect, thank you. I only need it overnight and can return it tomorrow.', time: '09 Apr, 5:12 PM', read: true },
-    { id: 'c8_m4', sender: 'me', text: 'No problem. Let us meet downstairs at 8:30 and we can start the exchange in the app.', time: '09 Apr, 5:16 PM', read: true },
-    { id: 'c8_m5', sender: 'them', text: 'I have picked it up, thanks again. I will message you as soon as I am done with the shelf.', time: '10 Apr, 9:05 AM', read: true },
-    { id: 'c8_m6', sender: 'me', text: 'Sounds good. Please make sure it is returned before the deadline shown in chat.', time: '10 Apr, 9:18 AM', read: true },
-    { id: 'c8_m7', sender: 'them', text: 'I am running behind because the build took longer than expected. I may need a little more time.', time: '12 Apr, 8:40 PM', read: true },
-    { id: 'c8_m8', sender: 'me', text: 'Please keep me updated. Once the deadline passes, the exchange will show as overdue until I can confirm the return.', time: '12 Apr, 8:52 PM', read: true },
-    { id: 'c8_m9', sender: 'them', text: 'Hi Alex, sorry about the late return. I dropped the screwdriver back this morning, but I think you were out.', time: '13 Apr, 10:05 AM', read: true },
-    { id: 'c8_m10', sender: 'me', text: 'Okay, I will check the mailbox area tonight and confirm once I see it.', time: '13 Apr, 10:18 AM', read: true },
-    { id: 'c8_m11', sender: 'them', text: 'Thank you. I really do not want this to stay overdue longer than necessary.', time: '13 Apr, 10:22 AM', read: false },
-  ],
-  c13: [
-    { id: 'c13_m1', sender: 'them', text: 'Thanks again for the React mentoring session.', time: '6:20 PM', read: true },
-    { id: 'c13_m2', sender: 'me', text: 'You did great. Your component structure is much cleaner now.', time: '6:22 PM', read: true },
-    { id: 'c13_m3', sender: 'them', text: 'I also understand the exchange states a lot better now.', time: '6:24 PM', read: true },
-    { id: 'c13_m4', sender: 'me', text: 'Glad to hear that. I have marked the task completed on my side.', time: '6:25 PM', read: true },
-    { id: 'c13_m5', sender: 'them', text: 'Perfect, I can see the review section now. I will leave feedback in a moment.', time: '6:27 PM', read: false },
-  ],
-  c14: [
-    { id: 'c14_m1', sender: 'them', text: 'Hi Alex, I need to flag an issue with the drill return.', time: '11:40 AM', read: true },
-    { id: 'c14_m2', sender: 'me', text: 'Okay, tell me what happened and we can sort it out here.', time: '11:42 AM', read: true },
-    { id: 'c14_m3', sender: 'them', text: 'The case came back, but one of the drill bits is missing.', time: '11:44 AM', read: true },
-    { id: 'c14_m4', sender: 'me', text: 'I understand. I have paused completion for now until we confirm everything.', time: '11:46 AM', read: true },
-    { id: 'c14_m5', sender: 'them', text: 'That is fair. Let us keep it disputed until I check my bag again tonight.', time: '11:49 AM', read: false },
-  ],
-};
+
 
 const CHAT_POST_META = {
   c4: {
@@ -496,6 +441,7 @@ const EXCHANGE_STATUS_CONFIG = {
 };
 
 export default function ChatScreen({ navigation, route }) {
+  const { addChat, updateLastMessage } = useChats();
   const [input, setInput] = useState('');
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [startExchangeOpen, setStartExchangeOpen] = useState(false);
@@ -511,13 +457,31 @@ export default function ChatScreen({ navigation, route }) {
   const [selectedLocationType, setSelectedLocationType] = useState('live');
 
   const chat = route?.params?.chat;
+  // For new chats that have no id yet, generate a stable id for this session
+  const newChatIdRef = useRef(`c_${Date.now()}`);
+  const effectiveChatId = chat?.id ?? newChatIdRef.current;
   const otherUserId = chat?.user?.id ?? 'u6';
   const otherUserName = chat?.user?.name ?? 'David M.';
   const otherUserGender = chat?.user?.gender;
   const initialMessages = useMemo(() => {
     if (chat?.id && CHAT_MESSAGE_SCENARIOS[chat.id]) return CHAT_MESSAGE_SCENARIOS[chat.id];
-    return mockMessages;
+    return [];
   }, [chat?.id]);
+
+  // Register a brand-new chat in the list when opening from the map
+  useEffect(() => {
+    if (!chat?.id) {
+      addChat({
+        id: effectiveChatId,
+        user: chat?.user ?? {},
+        postTitle: chat?.postTitle ?? 'New conversation',
+        lastMessage: '',
+        time: 'Just now',
+        unread: 0,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const postMeta = chat?.id && CHAT_POST_META[chat.id]
     ? CHAT_POST_META[chat.id]
     : {
@@ -698,6 +662,7 @@ export default function ChatScreen({ navigation, route }) {
       read: false,
     };
     setMessages(prev => [...prev, newMsg]);
+    updateLastMessage(effectiveChatId, newMsg.text, newMsg.time);
     setInput('');
     setTimeout(() => scrollToLatest(true), 30);
   };
@@ -964,7 +929,7 @@ export default function ChatScreen({ navigation, route }) {
           {!hasSentFirst && (
             <View style={styles.gateNotice}>
               <Text style={styles.gateText}>
-                Send your first message to start the conversation. David will reply when available.
+                Send your first message to start the conversation. {otherUserName} will reply when available.
               </Text>
             </View>
           )}

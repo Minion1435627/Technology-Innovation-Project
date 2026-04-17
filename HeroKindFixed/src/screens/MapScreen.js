@@ -12,7 +12,7 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import UrgencyBadge from '../components/UrgencyBadge';
 import { usePosts } from '../context/PostsContext';
-import { mockUser } from '../data/mockData';
+import { mockUser, mockChats } from '../data/mockData';
 
 // Distance options in km
 const DISTANCE_OPTIONS = [0.5, 1, 2, 5];
@@ -444,8 +444,9 @@ export default function MapScreen({ navigation }) {
                       style={styles.tooltipContactBtn}
                       onPress={() => {
                         setTooltip(null);
+                        const existingChat = mockChats.find(c => c.user.id === tooltip.poster.id);
                         navigation.navigate('ChatDetail', {
-                          chat: { user: { id: tooltip.poster.id, name: tooltip.poster.name }, postTitle: tooltip.title }
+                          chat: existingChat ?? { user: { id: tooltip.poster.id, name: tooltip.poster.name, gender: tooltip.poster.gender }, postTitle: tooltip.title },
                         });
                       }}
                     >

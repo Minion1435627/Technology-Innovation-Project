@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { PostsProvider } from '../context/PostsContext';
+import { ChatProvider } from '../context/ChatContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -107,6 +108,7 @@ export default function AppNavigator() {
 
   return (
     <PostsProvider>
+    <ChatProvider>
       <NavigationContainer>
         {isLoggedIn ? (
           <MainNavigator />
@@ -120,6 +122,7 @@ export default function AppNavigator() {
           </AuthStack.Navigator>
         )}
       </NavigationContainer>
+    </ChatProvider>
     </PostsProvider>
   );
 }
