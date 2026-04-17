@@ -45,6 +45,9 @@ const PLOT_UNLOCK_COSTS = {
   12: 195,
 };
 
+const WATER_PACK_COST = 8;
+const WATER_PACK_AMOUNT = 3;
+
 const createInitialPlots = () => [
   { id: 1, stage: 'ready', crop: 'carrot' },
   { id: 2, stage: 'sprout', crop: 'tomato' },
@@ -203,6 +206,16 @@ export default function FarmerScreen({ navigation }) {
     setMessage(`Plot ${nextLockedPlot.id} unlocked. More room for crops.`);
   };
 
+  const buyWater = () => {
+    if (coins < WATER_PACK_COST) {
+      setMessage(`${WATER_PACK_AMOUNT} water costs ${WATER_PACK_COST} coins.`);
+      return;
+    }
+    setCoins(prev => prev - WATER_PACK_COST);
+    setWater(prev => prev + WATER_PACK_AMOUNT);
+    setMessage(`Bought ${WATER_PACK_AMOUNT} water for ${WATER_PACK_COST} coins.`);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
@@ -252,8 +265,8 @@ export default function FarmerScreen({ navigation }) {
             <Text style={styles.rulesTitle}>Rules</Text>
             <Text style={styles.rulesText}>1. Level unlocks seeds</Text>
             <Text style={styles.rulesText}>2. Tap empty plot to plant</Text>
-            <Text style={styles.rulesText}>3. Water, harvest, sell</Text>
-            <Text style={styles.rulesText}>4. Coins unlock plots</Text>
+            <Text style={styles.rulesText}>3. Coins buy water/plots</Text>
+            <Text style={styles.rulesText}>4. Water, harvest, sell</Text>
           </View>
           <View style={styles.sceneTop}>
             <View style={styles.readyPill}>
@@ -325,16 +338,26 @@ export default function FarmerScreen({ navigation }) {
               <Text style={styles.basketText}>{basket}</Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={[styles.buyPlotButton, !nextLockedPlot && styles.buyPlotButtonDisabled]}
-            activeOpacity={nextLockedPlot ? 0.84 : 1}
-            onPress={buyNextPlot}
-          >
-            <Ionicons name="add-circle-outline" size={17} color={nextLockedPlot ? '#fffdf7' : '#9b9385'} />
-            <Text style={[styles.buyPlotText, !nextLockedPlot && styles.buyPlotTextDisabled]}>
-              {nextLockedPlot ? `Buy Plot ${nextLockedPlot.id} · ${nextPlotCost} coins` : 'All Plots Unlocked'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.shopButtons}>
+            <TouchableOpacity
+              style={styles.buyWaterButton}
+              activeOpacity={0.84}
+              onPress={buyWater}
+            >
+              <Ionicons name="water-outline" size={17} color="#fffdf7" />
+              <Text style={styles.shopButtonText}>Buy Water · {WATER_PACK_COST}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buyPlotButton, !nextLockedPlot && styles.buyPlotButtonDisabled]}
+              activeOpacity={nextLockedPlot ? 0.84 : 1}
+              onPress={buyNextPlot}
+            >
+              <Ionicons name="add-circle-outline" size={17} color={nextLockedPlot ? '#fffdf7' : '#9b9385'} />
+              <Text style={[styles.shopButtonText, !nextLockedPlot && styles.buyPlotTextDisabled]}>
+                {nextLockedPlot ? `Plot ${nextLockedPlot.id} · ${nextPlotCost}` : 'All Plots'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.plotGrid}>
             {plots.map(plot => {
@@ -738,7 +761,23 @@ const styles = StyleSheet.create({
     ...typography.smallBold,
     color: '#a56934',
   },
+  shopButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  buyWaterButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 8,
+    backgroundColor: '#6aa7c8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
   buyPlotButton: {
+    flex: 1,
     minHeight: 44,
     borderRadius: 8,
     backgroundColor: '#8a9d5f',
@@ -753,6 +792,11 @@ const styles = StyleSheet.create({
   buyPlotText: {
     ...typography.smallBold,
     color: '#fffdf7',
+  },
+  shopButtonText: {
+    ...typography.smallBold,
+    color: '#fffdf7',
+    fontSize: 11,
   },
   buyPlotTextDisabled: {
     color: '#9b9385',
