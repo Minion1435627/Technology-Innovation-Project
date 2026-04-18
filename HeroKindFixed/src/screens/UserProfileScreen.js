@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
 } from 'react-native';
@@ -18,6 +18,8 @@ export default function UserProfileScreen({ navigation, route }) {
   const userId = route?.params?.userId;
   const highlightReviewId = route?.params?.highlightReviewId;
   const user = userId === mockUser.id ? mockUser : mockOtherUsers[userId];
+  const scrollRef = useRef(null);
+  const highlightedReviewYRef = useRef(0);
 
   if (!user) {
     return (
@@ -35,6 +37,19 @@ export default function UserProfileScreen({ navigation, route }) {
 
   const stars = Math.round(user.stars);
 
+  useEffect(() => {
+    if (!highlightReviewId) return;
+
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(highlightedReviewYRef.current - 24, 0),
+        animated: true,
+      });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [highlightReviewId]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
 
@@ -47,7 +62,7 @@ export default function UserProfileScreen({ navigation, route }) {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Avatar + name block */}
         <View style={styles.heroBlock}>
@@ -137,6 +152,11 @@ export default function UserProfileScreen({ navigation, route }) {
               <View
                 key={review.id}
                 style={[styles.reviewCard, review.id === highlightReviewId && styles.reviewCardHighlighted]}
+                onLayout={event => {
+                  if (review.id === highlightReviewId) {
+                    highlightedReviewYRef.current = event.nativeEvent.layout.y;
+                  }
+                }}
               >
                 <View style={styles.reviewHeader}>
                   <Text style={styles.reviewerName}>{review.reviewer}</Text>

@@ -52,7 +52,7 @@ export const mockOtherUsers = {
     bio: 'Uni student, love baking and helping neighbours out 🍰',
     weeklyScore: 140, weeklyRank: 6,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'Returned everything super quickly, great neighbour!', tags: ['Reliable', 'Friendly'], date: '1 week ago' },
+      { id: 'r1', reviewer: 'David M.', stars: 5, comment: 'Returned everything super quickly, great neighbour!', tags: ['Reliable', 'Friendly'], date: '1 week ago' },
       { id: 'r2', reviewer: 'Emma R.', stars: 4, comment: 'Very responsive, came on time.', tags: ['Fast response'], date: '2 weeks ago' },
     ],
     posts: [
@@ -65,7 +65,7 @@ export const mockOtherUsers = {
     bio: 'Handyman & weekend cyclist. Happy to lend tools anytime 🔧',
     weeklyScore: 380, weeklyRank: 1,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'David is incredibly generous with his tools and time. Top neighbour!', tags: ['Reliable', 'Generous', 'Friendly'], date: '2 days ago' },
+      { id: 'r1', reviewer: 'Mia L.', stars: 5, comment: 'David is incredibly generous with his tools and time. Top neighbour!', tags: ['Reliable', 'Generous', 'Friendly'], date: '2 days ago' },
       { id: 'r2', reviewer: 'Nara P.', stars: 5, comment: 'Super helpful, lent his drill without hesitation.', tags: ['Trustworthy', 'Fast response'], date: '1 week ago' },
       { id: 'r3', reviewer: 'Sophie K.', stars: 4, comment: 'Great experience, tools were in perfect condition.', tags: ['Reliable'], date: '3 weeks ago' },
     ],
@@ -79,7 +79,7 @@ export const mockOtherUsers = {
     bio: 'Food lover, always cooking too much 🍜 Come eat with me!',
     weeklyScore: 275, weeklyRank: 3,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'The food was incredible, so generous!', tags: ['Generous', 'Friendly'], date: '3 days ago' },
+      { id: 'r1', reviewer: 'Sophie K.', stars: 5, comment: 'The food was incredible, so generous!', tags: ['Generous', 'Friendly'], date: '3 days ago' },
       { id: 'r2', reviewer: 'Mia L.', stars: 5, comment: 'Best Thai food I have ever had from a neighbour.', tags: ['Generous'], date: '1 week ago' },
     ],
     posts: [
@@ -92,7 +92,7 @@ export const mockOtherUsers = {
     bio: 'Always moving flats and grateful for neighbours who pitch in. Happy to return the favour!',
     weeklyScore: 95, weeklyRank: 7,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'James was grateful and super easy to coordinate with on moving day.', tags: ['Friendly', 'Appreciative'], date: '1 week ago' },
+      { id: 'r1', reviewer: 'Bella', stars: 5, comment: 'James was grateful and super easy to coordinate with on moving day.', tags: ['Friendly', 'Appreciative'], date: '1 week ago' },
     ],
     posts: [
       { id: 'n2', type: 'need', title: 'Help carrying boxes up 3 flights of stairs', category: 'Physical help', timePosted: '12 min ago' },
@@ -104,7 +104,7 @@ export const mockOtherUsers = {
     bio: 'Avid cyclist and uni student. Always happy to lend gear to fellow riders and help out nearby.',
     weeklyScore: 162, weeklyRank: 5,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'Sophie is incredibly reliable and always returns things in perfect condition.', tags: ['Reliable', 'Friendly'], date: '3 days ago' },
+      { id: 'r1', reviewer: 'Leo', stars: 5, comment: 'Sophie is incredibly reliable and always returns things in perfect condition.', tags: ['Reliable', 'Friendly'], date: '3 days ago' },
       { id: 'r2', reviewer: 'David M.', stars: 5, comment: 'Great neighbour, quick to respond and always helpful.', tags: ['Fast response', 'Trustworthy'], date: '2 weeks ago' },
     ],
     posts: [
@@ -117,7 +117,7 @@ export const mockOtherUsers = {
     bio: 'CS student who sometimes gets stuck on tricky datasets and loves collaborative problem-solving.',
     weeklyScore: 78, weeklyRank: 8,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 4, comment: 'Ryo was polite and picked up the concepts quickly once we got started.', tags: ['Friendly', 'Engaged'], date: '1 week ago' },
+      { id: 'r1', reviewer: 'Emma R.', stars: 4, comment: 'Ryo was polite and picked up the concepts quickly once we got started.', tags: ['Friendly', 'Engaged'], date: '1 week ago' },
     ],
     posts: [
       { id: 'n4', type: 'need', title: 'Need help with Python assignment', category: 'Study / Skills', timePosted: '1 hr ago' },
@@ -129,7 +129,7 @@ export const mockOtherUsers = {
     bio: '3rd year CS student. Happy to help with frontend questions and pair-programming sessions.',
     weeklyScore: 310, weeklyRank: 2,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'Emma explained everything clearly and was very patient throughout.', tags: ['Helpful', 'Patient', 'Friendly'], date: '4 days ago' },
+      { id: 'r1', reviewer: 'Ruby', stars: 5, comment: 'Emma explained everything clearly and was very patient throughout.', tags: ['Helpful', 'Patient', 'Friendly'], date: '4 days ago' },
       { id: 'r2', reviewer: 'Mia L.', stars: 5, comment: 'Super knowledgeable and made it easy to follow along.', tags: ['Knowledgeable', 'Friendly'], date: '1 week ago' },
       { id: 'r3', reviewer: 'Nara P.', stars: 4, comment: 'Great session, would definitely reach out again.', tags: ['Helpful'], date: '2 weeks ago' },
     ],
@@ -143,7 +143,7 @@ export const mockOtherUsers = {
     bio: 'Dog mum and outdoor enthusiast. My pup loves long walks and meeting friendly new people!',
     weeklyScore: 112, weeklyRank: 10,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'Lena was super appreciative and her dog was adorable to walk!', tags: ['Friendly', 'Appreciative'], date: '5 days ago' },
+      { id: 'r1', reviewer: 'Nara P.', stars: 5, comment: 'Lena was super appreciative and her dog was adorable to walk!', tags: ['Friendly', 'Appreciative'], date: '5 days ago' },
     ],
     posts: [
       { id: 'n5', type: 'need', title: 'Need someone to walk my dog', category: 'Pet care', timePosted: '35 min ago' },
@@ -155,7 +155,7 @@ export const mockOtherUsers = {
     bio: 'Recently moved apartments and passing on some beloved plants to good homes nearby.',
     weeklyScore: 55, weeklyRank: 13,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 4, comment: 'Quick handover, the plants were healthy and well-cared for.', tags: ['Friendly', 'Reliable'], date: '2 days ago' },
+      { id: 'r1', reviewer: 'Tammy', stars: 4, comment: 'Quick handover, the plants were healthy and well-cared for.', tags: ['Friendly', 'Reliable'], date: '2 days ago' },
     ],
     posts: [
       { id: 's4', type: 'supply', title: 'Giving away houseplants', category: 'Free item', timePosted: '2 hrs ago' },
@@ -167,7 +167,7 @@ export const mockOtherUsers = {
     bio: 'Frontend student who enjoys helping people untangle React state and UI flow problems.',
     weeklyScore: 210, weeklyRank: 5,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'Explained React concepts clearly and was very patient.', tags: ['Helpful', 'Friendly'], date: '5 days ago' },
+      { id: 'r1', reviewer: 'Bella', stars: 5, comment: 'Explained React concepts clearly and was very patient.', tags: ['Helpful', 'Friendly'], date: '5 days ago' },
     ],
     posts: [
       { id: 's11', type: 'supply', title: 'Can help with React / JavaScript questions this afternoon', category: 'Offer skills', timePosted: '2 hrs ago' },
@@ -179,7 +179,7 @@ export const mockOtherUsers = {
     bio: 'Usually borrowing tools for quick apartment fixes and always returns them carefully.',
     weeklyScore: 128, weeklyRank: 9,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 4, comment: 'Easy to coordinate with and polite in chat.', tags: ['Friendly', 'On time'], date: '1 week ago' },
+      { id: 'r1', reviewer: 'Minion', stars: 4, comment: 'Easy to coordinate with and polite in chat.', tags: ['Friendly', 'On time'], date: '1 week ago' },
     ],
     posts: [
       { id: 'n12', type: 'need', title: 'Need a screwdriver to assemble my IKEA shelf', category: 'Borrow an item', timePosted: '6 hrs ago' },
@@ -191,7 +191,7 @@ export const mockOtherUsers = {
     bio: 'Often borrows basic tools for DIY projects and keeps everyone updated during returns.',
     weeklyScore: 142, weeklyRank: 8,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'Great communication during the whole exchange.', tags: ['Clear communication', 'Reliable'], date: '4 days ago' },
+      { id: 'r1', reviewer: 'Ethan', stars: 5, comment: 'Great communication during the whole exchange.', tags: ['Clear communication', 'Reliable'], date: '4 days ago' },
     ],
     posts: [
       { id: 'n13', type: 'need', title: 'Need a screwdriver to finish one last shelf tonight', category: 'Borrow an item', timePosted: '7 hrs ago' },
@@ -203,7 +203,7 @@ export const mockOtherUsers = {
     bio: 'Happy to mentor people through UI polish, flows, and frontend debugging sessions.',
     weeklyScore: 240, weeklyRank: 4,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'Very thoughtful mentor and super practical.', tags: ['Helpful', 'Clear communication'], date: '2 days ago' },
+      { id: 'r1', reviewer: 'Tammy', stars: 5, comment: 'Very thoughtful mentor and super practical.', tags: ['Helpful', 'Clear communication'], date: '2 days ago' },
     ],
     posts: [
       { id: 's14', type: 'supply', title: 'Offering React mentoring for UI flow and state questions', category: 'Offer skills', timePosted: '8 hrs ago' },
@@ -215,7 +215,7 @@ export const mockOtherUsers = {
     bio: 'Usually careful with borrowed items, but sometimes juggles too many projects at once.',
     weeklyScore: 101, weeklyRank: 12,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 3, comment: 'Friendly, but the return needed extra follow-up this time.', tags: ['Friendly'], date: '1 day ago' },
+      { id: 'r1', reviewer: 'Leo', stars: 3, comment: 'Friendly, but the return needed extra follow-up this time.', tags: ['Friendly'], date: '1 day ago' },
     ],
     posts: [
       { id: 'n15', type: 'need', title: 'Need a screwdriver for shelf assembly, return delayed', category: 'Borrow an item', timePosted: '9 hrs ago' },
@@ -227,7 +227,7 @@ export const mockOtherUsers = {
     bio: 'Enjoys short study support sessions and always leaves thoughtful feedback after helping.',
     weeklyScore: 198, weeklyRank: 6,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 5, comment: 'The session was clear, focused, and super helpful.', tags: ['Helpful', 'Friendly'], date: '3 days ago' },
+      { id: 'r1', reviewer: 'Emma R.', stars: 5, comment: 'The session was clear, focused, and super helpful.', tags: ['Helpful', 'Friendly'], date: '3 days ago' },
     ],
     posts: [
       { id: 's19', type: 'supply', title: 'Can help review your React component structure', category: 'Offer skills', timePosted: '14 hrs ago' },
@@ -239,7 +239,7 @@ export const mockOtherUsers = {
     bio: 'Lends tools often and prefers to resolve issues carefully if something comes back missing.',
     weeklyScore: 205, weeklyRank: 7,
     reviews: [
-      { id: 'r1', reviewer: 'Alex Chen', stars: 4, comment: 'Generally very reliable and responsive.', tags: ['Reliable', 'Fast response'], date: '2 weeks ago' },
+      { id: 'r1', reviewer: 'David M.', stars: 4, comment: 'Generally very reliable and responsive.', tags: ['Reliable', 'Fast response'], date: '2 weeks ago' },
     ],
     posts: [
       { id: 's20', type: 'supply', title: 'Offering drill + bits set for weekend projects', category: 'Lend an item', timePosted: '15 hrs ago' },

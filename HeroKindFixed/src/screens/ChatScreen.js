@@ -576,6 +576,7 @@ export default function ChatScreen({ navigation, route }) {
         return {
           handoverDate: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
           agreedReturnDate: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          disputedDate: new Date(now - 6 * 60 * 60 * 1000).toISOString(),
         };
       case 'pending':
       default:
@@ -699,6 +700,17 @@ export default function ChatScreen({ navigation, route }) {
     setReviewPromptConfirmOpen(false);
     navigation.navigate('Transaction', {
       transaction: completedTransaction,
+      focusReviewPrompt: true,
+    });
+  };
+
+  const openCompletedReviewInTransaction = () => {
+    navigation.navigate('Transaction', {
+      transaction: {
+        ...buildTransactionPayload(),
+        status: 'completed',
+        completedDate: new Date().toISOString(),
+      },
       focusReviewPrompt: true,
     });
   };
@@ -888,7 +900,7 @@ export default function ChatScreen({ navigation, route }) {
           id: 'review',
           label: 'Leave Review',
           helper: 'Add feedback that will also appear on the user profile.',
-          onPress: openTransaction,
+          onPress: openCompletedReviewInTransaction,
         }]
         : []),
       ...(exchange.state === 'disputed'

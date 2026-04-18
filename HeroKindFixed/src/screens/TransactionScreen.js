@@ -84,9 +84,11 @@ export default function TransactionScreen({ navigation, route }) {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [submittedReviewId, setSubmittedReviewId] = useState(null);
+  const [submittedReviewUserId, setSubmittedReviewUserId] = useState(null);
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const scrollRef = useRef(null);
   const reviewPromptYRef = useRef(0);
+  const reviewTargetUser = tx.provider.id === mockUser.id ? tx.requester : tx.provider;
 
   const isProvider = tx.myRole === 'provider';
   const isRequester = tx.myRole === 'requester';
@@ -111,6 +113,14 @@ export default function TransactionScreen({ navigation, route }) {
       : tx.status === 'pending'
         ? 'Waiting for the other side to accept the start request'
         : 'The exchange is active until the supplier marks it completed';
+  const timelinePastColor = colors.primary;
+  const timelineCurrentColor = colors.success;
+  const acceptedDotColor = tx.status === 'pending' ? timelineCurrentColor : timelinePastColor;
+  const deadlineDotColor = tx.status === 'overdue'
+    ? colors.error
+    : (tx.status === 'in_progress' ? timelineCurrentColor : timelinePastColor);
+  const completedDotColor = timelineCurrentColor;
+  const disputedDotColor = cfg.color;
 
   const acceptExchange = () => {
     const title = 'Accept Exchange';
@@ -154,7 +164,7 @@ export default function TransactionScreen({ navigation, route }) {
           text: 'Raise Dispute',
           style: 'destructive',
           onPress: () => {
-            setTx(t => ({ ...t, status: 'disputed' }));
+            setTx(t => ({ ...t, status: 'disputed', disputedDate: new Date().toISOString() }));
             setReviewPromptVisible(false);
           },
         },
@@ -174,13 +184,14 @@ export default function TransactionScreen({ navigation, route }) {
       return;
     }
 
-    const reviewedUserId = isProvider ? tx.requester.id : tx.provider.id;
+    const reviewedUserId = reviewTargetUser.id;
     const nextReview = addReviewToUserProfile(reviewedUserId, {
       reviewer: mockUser.name,
       stars: reviewRating,
       comment: reviewComment,
       tags: selectedReviewTags,
     });
+    setSubmittedReviewUserId(reviewedUserId);
     setSubmittedReviewId(nextReview?.id ?? null);
     setReviewSubmitted(true);
     setReviewPromptVisible(false);
@@ -203,7 +214,7 @@ export default function TransactionScreen({ navigation, route }) {
 
     const timer = setTimeout(() => {
       scrollRef.current?.scrollTo({
-        y: Math.max(reviewPromptYRef.current - 24, 0),
+        y: Math.max(reviewPromptYRef.current - 64, 0),
         animated: true,
       });
     }, 250);
@@ -305,7 +316,7 @@ export default function TransactionScreen({ navigation, route }) {
           <Text style={styles.cardLabel}>TIMELINE</Text>
 
           <View style={styles.timelineRow}>
-            <View style={[styles.timelineDot, { backgroundColor: colors.supply }]} />
+            <View style={[styles.timelineDot, { backgroundColor: acceptedDotColor }]} />
             <View style={styles.timelineInfo}>
               <Text style={styles.timelineEvent}>{startEventLabel}</Text>
               <Text style={styles.timelineDate}>{formatDate(tx.handoverDate)}</Text>
@@ -317,7 +328,7 @@ export default function TransactionScreen({ navigation, route }) {
               <View
                 style={[
                   styles.timelineDot,
-                  { backgroundColor: tx.status === 'overdue' ? colors.error : colors.primary },
+                  { backgroundColor: deadlineDotColor },
                 ]}
               />
               <View style={styles.timelineInfo}>
@@ -337,10 +348,20 @@ export default function TransactionScreen({ navigation, route }) {
 
           {tx.status === 'completed' && tx.completedDate && (
             <View style={styles.timelineRow}>
-              <View style={[styles.timelineDot, { backgroundColor: colors.success }]} />
+              <View style={[styles.timelineDot, { backgroundColor: completedDotColor }]} />
               <View style={styles.timelineInfo}>
                 <Text style={styles.timelineEvent}>Completed</Text>
                 <Text style={styles.timelineDate}>{formatDate(tx.completedDate)}</Text>
+              </View>
+            </View>
+          )}
+
+          {tx.status === 'disputed' && tx.disputedDate && (
+            <View style={styles.timelineRow}>
+              <View style={[styles.timelineDot, { backgroundColor: disputedDotColor }]} />
+              <View style={styles.timelineInfo}>
+                <Text style={styles.timelineEvent}>Disputed</Text>
+                <Text style={styles.timelineDate}>{formatDate(tx.disputedDate)}</Text>
               </View>
             </View>
           )}
@@ -403,7 +424,7 @@ export default function TransactionScreen({ navigation, route }) {
           >
             <View style={styles.reviewHeader}>
               <Ionicons name="star-outline" size={18} color={colors.success} />
-              <Text style={styles.reviewTitle}>Review prompt unlocked</Text>
+              <Text style={styles.reviewTitle}>Leave a Review</Text>
             </View>
             <Text style={styles.reviewBody}>
               Leave a quick rating for this exchange. You can choose multiple tags and add a short comment before submitting.
@@ -492,7 +513,7 @@ export default function TransactionScreen({ navigation, route }) {
               style={styles.profileReviewBtn}
               onPress={() =>
                 navigation.navigate('UserProfile', {
-                  userId: isProvider ? tx.requester.id : tx.provider.id,
+                  userId: submittedReviewUserId ?? reviewTargetUser.id,
                   highlightReviewId: submittedReviewId,
                 })
               }
@@ -542,11 +563,17 @@ export default function TransactionScreen({ navigation, route }) {
 
           {tx.status === 'completed' && !reviewSubmitted && (
             <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: colors.success }]}
+              style={reviewPromptVisible ? styles.reviewDismissBtn : styles.reviewOpenBtn}
               onPress={() => setReviewPromptVisible(v => !v)}
             >
-              <Ionicons name="star-outline" size={20} color="#fff" />
-              <Text style={styles.primaryBtnText}>{reviewPromptVisible ? 'Not Now' : 'Leave a Review'}</Text>
+              <Ionicons
+                name="star-outline"
+                size={20}
+                color={reviewPromptVisible ? colors.textSecondary : colors.textWhite}
+              />
+              <Text style={reviewPromptVisible ? styles.reviewDismissBtnText : styles.primaryBtnText}>
+                {reviewPromptVisible ? 'Not Now' : 'Leave a Review'}
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -837,15 +864,18 @@ const styles = StyleSheet.create({
   },
   reviewActions: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
   },
   reviewLaterBtn: {
-    flex: 1,
-    borderRadius: 12,
     paddingVertical: 12,
+    paddingHorizontal: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    borderWidth: 0,
+    alignSelf: 'center',
   },
   reviewLaterBtnText: {
     ...typography.smallBold,
@@ -879,7 +909,7 @@ const styles = StyleSheet.create({
   },
   profileReviewBtn: {
     marginTop: 4,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-end',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -903,6 +933,30 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   primaryBtnText: { ...typography.button, color: '#fff' },
+  reviewOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    padding: 15,
+  },
+  reviewDismissBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 15,
+  },
+  reviewDismissBtnText: {
+    ...typography.button,
+    color: colors.textSecondary,
+  },
   reminderBox: {
     flexDirection: 'row',
     gap: 10,
