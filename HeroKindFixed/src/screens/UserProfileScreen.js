@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { mockOtherUsers } from '../data/mockData';
+import { mockOtherUsers, mockUser } from '../data/mockData';
 
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
 const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
@@ -16,7 +16,8 @@ const TYPE_LABEL = { need: 'Need', supply: 'Supply' };
 
 export default function UserProfileScreen({ navigation, route }) {
   const userId = route?.params?.userId;
-  const user = mockOtherUsers[userId];
+  const highlightReviewId = route?.params?.highlightReviewId;
+  const user = userId === mockUser.id ? mockUser : mockOtherUsers[userId];
 
   if (!user) {
     return (
@@ -133,12 +134,20 @@ export default function UserProfileScreen({ navigation, route }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Reviews ({user.reviews.length})</Text>
             {user.reviews.map(review => (
-              <View key={review.id} style={styles.reviewCard}>
+              <View
+                key={review.id}
+                style={[styles.reviewCard, review.id === highlightReviewId && styles.reviewCardHighlighted]}
+              >
                 <View style={styles.reviewHeader}>
                   <Text style={styles.reviewerName}>{review.reviewer}</Text>
                   <Text style={styles.reviewStars}>{'⭐'.repeat(review.stars)}</Text>
                   <Text style={styles.reviewDate}>{review.date}</Text>
                 </View>
+                {review.id === highlightReviewId && (
+                  <View style={styles.newReviewBadge}>
+                    <Text style={styles.newReviewBadgeText}>Your latest review</Text>
+                  </View>
+                )}
                 <Text style={styles.reviewComment}>{review.comment}</Text>
                 <View style={styles.reviewTags}>
                   {review.tags.map(tag => (
@@ -218,6 +227,24 @@ const styles = StyleSheet.create({
 
   section: { gap: 10 },
   sectionTitle: { ...typography.h4, color: colors.textPrimary },
+  reviewCardHighlighted: {
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+    backgroundColor: colors.primaryLight,
+  },
+  newReviewBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  newReviewBadgeText: {
+    ...typography.caption,
+    color: colors.textWhite,
+    fontWeight: '700',
+  },
 
   postRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

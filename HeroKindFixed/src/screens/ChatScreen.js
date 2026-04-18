@@ -57,10 +57,11 @@ const EXCHANGE_META = {
     state: 'pending',
     type: 'borrow',
     myRole: 'provider',
+    pendingBy: 'provider',
     typeLabel: 'Borrowed item',
     statusLabel: 'Pending',
-    countdownText: 'Timer starts after provider confirms handover',
-    summaryText: 'Use this thread to test the provider pending handover action',
+    countdownText: 'Waiting for the other side to accept the start request',
+    summaryText: 'A start request has been sent and this exchange is waiting for acceptance',
     actionLabel: 'View Exchange',
   },
   c6: {
@@ -167,7 +168,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'm10',
       icon: 'swap-horizontal-outline',
       title: 'Pending',
-      body: 'Help-task exchange was created from this conversation and is waiting for the provider to confirm task start.',
+      body: 'A start request was sent for this help task and is waiting for the other side to accept.',
       time: '15 Apr 2026, 1:05 PM',
     },
     {
@@ -176,7 +177,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'm15',
       icon: 'sync-outline',
       title: 'Started',
-      body: 'Provider confirmed the task started. The help-task countdown is now active.',
+      body: 'The other side accepted the request. The help-task countdown is now active.',
       time: '15 Apr 2026, 2:10 PM',
     },
     {
@@ -196,7 +197,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c5_m3',
       icon: 'swap-horizontal-outline',
       title: 'Pending',
-      body: 'Exchange created. This borrowed-item flow is waiting for provider handover confirmation.',
+      body: 'A start request was sent for this borrowed-item exchange and it is waiting for acceptance.',
       time: '15 Apr 2026, 9:00 AM',
     },
   ],
@@ -207,7 +208,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c6_m2',
       icon: 'swap-horizontal-outline',
       title: 'Pending',
-      body: 'Exchange created. This borrowed-item flow waited for provider handover confirmation.',
+      body: 'A start request was sent for this borrowed-item exchange and it waited for acceptance.',
       time: '15 Apr 2026, 9:05 AM',
     },
     {
@@ -216,7 +217,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c6_m4',
       icon: 'sync-outline',
       title: 'Started',
-      body: 'Provider confirmed handover. Countdown started and the borrowed-item flow is now in progress.',
+      body: 'The other side accepted the request. Countdown started and the borrowed-item flow is now in progress.',
       time: '15 Apr 2026, 10:10 AM',
     },
   ],
@@ -227,7 +228,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c7_m2',
       icon: 'swap-horizontal-outline',
       title: 'Pending',
-      body: 'Exchange created. This help-task flow waited for provider task-start confirmation.',
+      body: 'A start request was sent for this help-task exchange and it waited for acceptance.',
       time: '15 Apr 2026, 2:00 PM',
     },
     {
@@ -236,7 +237,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c7_m4',
       icon: 'sync-outline',
       title: 'Started',
-      body: 'Provider confirmed the task started. Countdown started and this service flow is now in progress.',
+      body: 'The other side accepted the request. Countdown started and this service flow is now in progress.',
       time: '15 Apr 2026, 3:05 PM',
     },
   ],
@@ -247,7 +248,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c8_m2',
       icon: 'swap-horizontal-outline',
       title: 'Pending',
-      body: 'Exchange created. This borrowed-item flow waited for provider handover confirmation.',
+      body: 'A start request was sent for this borrowed-item exchange and it waited for acceptance.',
       time: '09 Apr 2026, 5:20 PM',
     },
     {
@@ -256,7 +257,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c8_m5',
       icon: 'sync-outline',
       title: 'Started',
-      body: 'Provider confirmed handover. Countdown started and the borrowed-item flow moved into progress.',
+      body: 'The other side accepted the request. Countdown started and the borrowed-item flow moved into progress.',
       time: '10 Apr 2026, 9:00 AM',
     },
     {
@@ -276,7 +277,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c13_m1',
       icon: 'swap-horizontal-outline',
       title: 'Pending',
-      body: 'Exchange created. This help-task flow was waiting for provider task-start confirmation.',
+      body: 'A start request was sent for this help-task exchange and it was waiting for acceptance.',
       time: '14 Apr 2026, 11:00 AM',
     },
     {
@@ -285,7 +286,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c13_m3',
       icon: 'sync-outline',
       title: 'Started',
-      body: 'Provider confirmed the task started and the help-task exchange moved into progress.',
+      body: 'The other side accepted the request and the help-task exchange moved into progress.',
       time: '14 Apr 2026, 1:00 PM',
     },
     {
@@ -305,7 +306,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c14_m1',
       icon: 'swap-horizontal-outline',
       title: 'Pending',
-      body: 'Exchange created. This borrowed-item flow was waiting for provider handover confirmation.',
+      body: 'A start request was sent for this borrowed-item exchange and it was waiting for acceptance.',
       time: '12 Apr 2026, 10:30 AM',
     },
     {
@@ -314,7 +315,7 @@ const EXCHANGE_SYSTEM_MESSAGES = {
       afterId: 'c14_m2',
       icon: 'sync-outline',
       title: 'Started',
-      body: 'Provider confirmed handover. Countdown started and the borrowed-item exchange moved into progress.',
+      body: 'The other side accepted the request and the borrowed-item exchange moved into progress.',
       time: '12 Apr 2026, 1:15 PM',
     },
     {
@@ -446,7 +447,12 @@ export default function ChatScreen({ navigation, route }) {
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [startExchangeOpen, setStartExchangeOpen] = useState(false);
   const [statusHistoryOpen, setStatusHistoryOpen] = useState(false);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [reviewPromptConfirmOpen, setReviewPromptConfirmOpen] = useState(false);
+  const [statusReasonOpen, setStatusReasonOpen] = useState(false);
+  const [statusReasonConfig, setStatusReasonConfig] = useState({ title: '', body: '' });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [exchangeOptionsOpen, setExchangeOptionsOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showStickyCompact, setShowStickyCompact] = useState(false);
   const [draftExchangeType, setDraftExchangeType] = useState('borrow');
@@ -611,6 +617,7 @@ export default function ChatScreen({ navigation, route }) {
     provider: { id: otherUserId, name: otherUserName, level: 3, stars: 4.7 },
     requester: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
     myRole: exchange?.myRole ?? 'requester',
+    pendingBy: exchange?.pendingBy ?? 'requester',
     notes: exchange?.type === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
   });
 
@@ -618,22 +625,127 @@ export default function ChatScreen({ navigation, route }) {
     navigation.navigate('Transaction', { transaction: buildTransactionPayload() });
   };
 
+  const addSystemEvent = (title, body, icon = 'information-circle-outline') => {
+    const event = {
+      id: `sys_dynamic_${Date.now()}`,
+      type: 'system',
+      icon,
+      title,
+      body,
+      time: new Date().toLocaleString('en-AU', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    };
+    setMessages(prev => [...prev, event]);
+  };
+
+  const acceptExchangeInChat = () => {
+    if (!exchange) return;
+    setExchange(prev => ({
+      ...prev,
+      state: 'in_progress',
+      statusLabel: 'In Progress',
+      countdownText: prev.type === 'service' ? 'Task window is now active' : 'Return countdown is now active',
+      summaryText: prev.type === 'service'
+        ? 'The exchange is active until the supplier marks the task completed'
+        : 'The exchange is active until the supplier confirms completion',
+    }));
+    addSystemEvent(
+      'Started',
+      exchange.type === 'service'
+        ? 'The start request was accepted and this help task is now in progress.'
+        : 'The start request was accepted and this borrowed-item exchange is now in progress.',
+      'sync-outline'
+    );
+  };
+
+  const completeExchangeInChat = () => {
+    if (!exchange) return;
+    setCompleteConfirmOpen(true);
+  };
+
+  const confirmCompleteExchangeInChat = () => {
+    if (!exchange) return;
+
+    setExchange(prev => ({
+      ...prev,
+      state: 'completed',
+      statusLabel: 'Completed',
+      countdownText: 'Review prompt unlocked',
+      summaryText: 'This exchange is complete. You can now leave a review.',
+    }));
+    addSystemEvent(
+      'Exchange completed',
+      exchange.type === 'service'
+        ? 'The supplier marked the task completed. You can now leave a review.'
+        : 'The supplier marked the exchange completed after the item return. You can now leave a review.',
+      'checkmark-circle-outline'
+    );
+    setCompleteConfirmOpen(false);
+    setReviewPromptConfirmOpen(true);
+  };
+
+  const openReviewPromptInTransaction = () => {
+    const completedTransaction = {
+      ...buildTransactionPayload(),
+      status: 'completed',
+      completedDate: new Date().toISOString(),
+    };
+
+    setReviewPromptConfirmOpen(false);
+    navigation.navigate('Transaction', {
+      transaction: completedTransaction,
+      focusReviewPrompt: true,
+    });
+  };
+
+  const openStatusReasonPopup = (reasonType) => {
+    if (!exchange) return;
+
+    if (reasonType === 'dispute') {
+      setStatusReasonConfig({
+        title: 'Dispute Reason',
+        body: exchange.type === 'service'
+          ? 'This exchange is under dispute because one side reported the task outcome is still unresolved. Penalties are paused while both sides review what happened.'
+          : 'This exchange is under dispute because the borrowed-item return could not be fully verified. Penalties are paused while both sides review the return details.',
+      });
+      setStatusReasonOpen(true);
+      return;
+    }
+
+    setStatusReasonConfig({
+      title: 'Overdue Reason',
+      body: exchange.type === 'service'
+        ? 'This help task has passed its agreed time window without final completion, so it is now marked overdue until the exchange is resolved.'
+        : exchange.myRole === 'provider'
+          ? 'This borrowed-item exchange is overdue because the return deadline passed before the final completion was confirmed.'
+          : 'This borrowed-item exchange is overdue because the return deadline passed without final confirmation. Restrictions may apply until the supplier resolves it.',
+    });
+    setStatusReasonOpen(true);
+  };
+
   const startExchange = () => {
     const nextExchange = {
       state: 'pending',
       type: draftExchangeType,
+      pendingBy: 'requester',
       typeLabel: draftExchangeType === 'service' ? 'Help / service' : 'Borrowed item',
       statusLabel: 'Pending',
-      countdownText: draftExchangeType === 'service'
-        ? 'Timer starts after provider confirms task start'
-        : 'Timer starts after provider confirms handover',
-      summaryText: draftExchangeType === 'service'
-        ? 'Waiting for provider to confirm the task has started'
-        : 'Waiting for provider to confirm item handover',
+      countdownText: 'Waiting for the other side to accept the start request',
+      summaryText: 'A start request has been sent and this exchange is waiting for acceptance',
       actionLabel: 'View Exchange',
     };
 
     setExchange(nextExchange);
+    addSystemEvent(
+      'Pending',
+      'A start request was sent. This exchange is now waiting for the other side to accept.',
+      'swap-horizontal-outline'
+    );
     setStartExchangeOpen(false);
     navigation.navigate('Transaction', {
       transaction: {
@@ -645,11 +757,167 @@ export default function ChatScreen({ navigation, route }) {
         provider: { id: otherUserId, name: otherUserName, level: 3, stars: 4.7 },
         requester: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
         myRole: 'requester',
+        pendingBy: 'requester',
         handoverDate: new Date().toISOString(),
         agreedReturnDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
         notes: draftExchangeType === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
       },
     });
+  };
+
+  const canAcceptExchange = Boolean(exchange?.pendingBy && exchange.pendingBy !== exchange?.myRole);
+
+  const exchangeActionConfig = !exchange
+    ? {
+      title: 'Ready to start',
+      body: 'Once both sides agree, send a start request to move this task into pending.',
+      primaryLabel: 'Send Start',
+      secondaryLabel: 'More',
+      onPrimary: () => setStartExchangeOpen(true),
+      onSecondary: openOriginalPost,
+      primaryTone: 'primary',
+    }
+      : exchange.state === 'pending'
+      ? {
+        title: 'Pending',
+        body: canAcceptExchange
+          ? 'A start request is waiting for your acceptance. Accepting will move the exchange into progress.'
+          : 'A start request has been sent and is waiting for the other side to accept.',
+        primaryLabel: canAcceptExchange ? 'Accept' : 'Pending',
+        secondaryLabel: 'View Transaction',
+        onPrimary: canAcceptExchange ? acceptExchangeInChat : openTransaction,
+        onSecondary: openTransaction,
+          primaryTone: canAcceptExchange ? 'primary' : 'muted',
+        }
+      : exchange.state === 'in_progress' || exchange.state === 'due_soon'
+        ? {
+          title: 'In Progress',
+          body: exchange.myRole === 'provider'
+            ? (exchange.type === 'service'
+              ? 'Mark the task completed when the session is done.'
+              : 'Mark the exchange completed once the item has been returned.')
+            : 'The exchange is active. Keep coordinating here until the supplier completes it.',
+          primaryLabel: exchange.myRole === 'provider'
+            ? 'Complete'
+            : 'In Progress',
+          secondaryLabel: 'View Transaction',
+          onPrimary: exchange.myRole === 'provider' ? completeExchangeInChat : openTransaction,
+          onSecondary: openTransaction,
+          primaryTone: exchange.myRole === 'provider' ? 'primary' : 'muted',
+        }
+        : exchange.state === 'overdue'
+          ? {
+            title: 'Overdue',
+            body: exchange.myRole === 'provider'
+              ? 'Open the exchange to confirm the return or resolve the overdue state.'
+              : 'This exchange is overdue. Open the transaction to review the restriction details.',
+            primaryLabel: exchange.myRole === 'provider'
+              ? 'Complete'
+              : 'View Overdue',
+            secondaryLabel: null,
+            onPrimary: exchange.myRole === 'provider' ? completeExchangeInChat : openTransaction,
+            onSecondary: null,
+            primaryTone: exchange.myRole === 'provider' ? 'primary' : 'danger',
+          }
+          : exchange.state === 'completed'
+            ? {
+              title: 'Completed',
+              body: 'This exchange is finished. You can leave a review and it will appear on the user profile.',
+              primaryLabel: 'Leave Review',
+              secondaryLabel: 'View Transaction',
+              onPrimary: openTransaction,
+              onSecondary: openTransaction,
+              primaryTone: 'success',
+            }
+            : {
+              title: 'Disputed',
+              body: 'This exchange is paused for review. Open the transaction to see the dispute details.',
+              primaryLabel: 'View Dispute',
+              secondaryLabel: null,
+              onPrimary: openTransaction,
+              onSecondary: null,
+              primaryTone: 'danger',
+            };
+
+  const exchangeQuickActions = !exchange
+    ? [
+      {
+        id: 'send_start',
+        label: 'Send Start',
+        helper: 'Send a start request to move the task into pending.',
+        onPress: () => setStartExchangeOpen(true),
+      },
+      {
+        id: 'more',
+        label: 'More',
+        helper: 'Open the original post details.',
+        onPress: openOriginalPost,
+      },
+    ]
+    : [
+      ...(!['pending', 'in_progress', 'due_soon', 'overdue', 'completed', 'disputed'].includes(exchange.state)
+        ? [{
+          id: 'state',
+          label: exchangeActionConfig.title,
+          helper: exchangeActionConfig.body,
+          onPress: exchangeActionConfig.onPrimary,
+        }]
+        : []),
+      ...(exchange.state === 'pending'
+        ? (canAcceptExchange ? [{
+          id: 'accept',
+          label: 'Accept',
+          helper: canAcceptExchange
+            ? 'Accept the start request and move the exchange into progress.'
+            : 'The request has been sent and is waiting for acceptance.',
+          onPress: acceptExchangeInChat,
+        }] : [])
+        : []),
+      ...((exchange.state === 'in_progress' || exchange.state === 'due_soon')
+        ? (exchange.myRole === 'provider'
+          ? [{
+            id: 'complete',
+            label: 'Complete',
+            helper: 'Confirm that the task is done or the item has been returned.',
+            onPress: completeExchangeInChat,
+          }]
+          : [])
+        : []),
+      ...(exchange.state === 'completed'
+        ? [{
+          id: 'review',
+          label: 'Leave Review',
+          helper: 'Add feedback that will also appear on the user profile.',
+          onPress: openTransaction,
+        }]
+        : []),
+      ...(exchange.state === 'disputed'
+        ? [{
+          id: 'dispute',
+          label: 'View Dispute',
+          helper: 'See the current dispute and paused penalties.',
+          onPress: () => openStatusReasonPopup('dispute'),
+        }]
+        : []),
+      ...(exchange.state === 'overdue'
+        ? [{
+          id: 'overdue',
+          label: 'View Overdue',
+          helper: 'See why this exchange is currently overdue.',
+          onPress: () => openStatusReasonPopup('overdue'),
+        }]
+        : []),
+      {
+        id: 'transaction',
+        label: 'View Transaction',
+        helper: 'Open the full exchange detail screen.',
+        onPress: openTransaction,
+      },
+    ];
+
+  const handleExchangeQuickAction = (action) => {
+    setExchangeOptionsOpen(false);
+    setTimeout(() => action.onPress?.(), 120);
   };
 
   const send = () => {
@@ -924,6 +1192,16 @@ export default function ChatScreen({ navigation, route }) {
                 <Text style={styles.taskFooterLink}>More</Text>
               </View>
             </TouchableOpacity>
+
+            <View style={styles.exchangeActionCard}>
+              <View style={styles.exchangeActionCopy}>
+                <Text style={styles.exchangeActionTitle}>{exchangeActionConfig.title}</Text>
+                <Text style={styles.exchangeActionBody}>{exchangeActionConfig.body}</Text>
+              </View>
+              <Text style={styles.exchangeActionHint}>
+                Tap the small button to choose actions like pending, start, complete, or review.
+              </Text>
+            </View>
           </View>
 
           {!hasSentFirst && (
@@ -1103,6 +1381,14 @@ export default function ChatScreen({ navigation, route }) {
             <Ionicons name="arrow-down-outline" size={16} color={colors.textWhite} />
           </TouchableOpacity>
         )}
+
+        <TouchableOpacity
+          style={styles.floatingTaskBtn}
+          activeOpacity={0.9}
+          onPress={() => setExchangeOptionsOpen(true)}
+        >
+          <Ionicons name="list-outline" size={18} color={colors.textWhite} />
+        </TouchableOpacity>
 
         <View style={styles.inputBar}>
           <TouchableOpacity style={styles.attachBtn} onPress={() => {
@@ -1292,6 +1578,83 @@ export default function ChatScreen({ navigation, route }) {
         </Modal>
 
         <Modal
+          visible={completeConfirmOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCompleteConfirmOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setCompleteConfirmOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>
+                {exchange?.type === 'service' ? 'Mark Task Completed' : 'Complete Exchange'}
+              </Text>
+              <Text style={styles.popupBody}>
+                {exchange?.type === 'service'
+                  ? 'Please confirm the task has been completed before closing this exchange.'
+                  : 'Please confirm the item has been returned before closing this exchange.'}
+              </Text>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity style={styles.popupSecondaryBtn} onPress={() => setCompleteConfirmOpen(false)}>
+                  <Text style={styles.popupSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.popupSuccessBtn} onPress={confirmCompleteExchangeInChat}>
+                  <Text style={styles.popupSuccessText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={statusReasonOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setStatusReasonOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setStatusReasonOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>{statusReasonConfig.title}</Text>
+              <Text style={styles.popupBody}>{statusReasonConfig.body}</Text>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity style={styles.popupSuccessBtn} onPress={() => setStatusReasonOpen(false)}>
+                  <Text style={styles.popupSuccessText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={reviewPromptConfirmOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setReviewPromptConfirmOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setReviewPromptConfirmOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>Leave Review</Text>
+              <Text style={styles.popupBody}>
+                This exchange is complete. Would you like to go to the exchange page and leave a review now?
+              </Text>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity style={styles.popupSecondaryBtn} onPress={() => setReviewPromptConfirmOpen(false)}>
+                  <Text style={styles.popupSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.popupSuccessBtn} onPress={openReviewPromptInTransaction}>
+                  <Text style={styles.popupSuccessText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
           visible={menuOpen}
           transparent
           animationType="slide"
@@ -1347,6 +1710,46 @@ export default function ChatScreen({ navigation, route }) {
                 <View style={styles.menuPrimaryContent}>
                   <Ionicons name="close-circle-outline" size={18} color={colors.textWhite} />
                   <Text style={styles.menuPrimaryText}>Close Options</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={exchangeOptionsOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setExchangeOptionsOpen(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <TouchableOpacity style={styles.sheetDismissArea} activeOpacity={1} onPress={() => setExchangeOptionsOpen(false)} />
+            <View style={styles.sheet}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Task Actions</Text>
+              <Text style={styles.sheetSub}>
+                Pick the next task step from here, like pending, start, complete, or review.
+              </Text>
+
+              {exchangeQuickActions.map(action => (
+                <TouchableOpacity
+                  key={action.id}
+                  style={styles.quickActionRow}
+                  activeOpacity={0.88}
+                  onPress={() => handleExchangeQuickAction(action)}
+                >
+                  <View style={styles.quickActionCopy}>
+                    <Text style={styles.quickActionTitle}>{action.label}</Text>
+                    <Text style={styles.quickActionBody}>{action.helper}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              ))}
+
+              <TouchableOpacity style={styles.menuPrimaryBtn} onPress={() => setExchangeOptionsOpen(false)}>
+                <View style={styles.menuPrimaryContent}>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textWhite} />
+                  <Text style={styles.menuPrimaryText}>Close Actions</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -1431,7 +1834,7 @@ export default function ChatScreen({ navigation, route }) {
                 <View style={styles.typeOptionCopy}>
                   <Text style={styles.typeOptionTitle}>Borrowed item</Text>
                   <Text style={styles.typeOptionBody}>
-                    Use this for lending or borrowing objects. Countdown starts after provider confirms handover, and provider confirms the final return.
+                    Use this for lending or borrowing objects. One side sends a start request first, then the other side accepts to begin the exchange.
                   </Text>
                 </View>
                 {draftExchangeType === 'borrow' && (
@@ -1446,7 +1849,7 @@ export default function ChatScreen({ navigation, route }) {
                 <View style={styles.typeOptionCopy}>
                   <Text style={styles.typeOptionTitle}>Help / service</Text>
                   <Text style={styles.typeOptionBody}>
-                    Use this for one-off help tasks. Countdown starts after provider confirms the task started, and provider marks the task completed to finish it.
+                    Use this for one-off help tasks. One side sends a start request first, then the other side accepts to begin the exchange.
                   </Text>
                 </View>
                 {draftExchangeType === 'service' && (
@@ -1458,8 +1861,8 @@ export default function ChatScreen({ navigation, route }) {
                 <Text style={styles.ruleTitle}>What happens next</Text>
                 <Text style={styles.ruleBody}>
                   {draftExchangeType === 'service'
-                    ? 'The exchange will be created in pending state. Countdown begins only after provider confirms task start.'
-                    : 'The exchange will be created in pending state. Countdown begins only after provider confirms the item handover.'}
+                    ? 'The exchange will be created in pending state. Countdown begins after the other side accepts the request.'
+                    : 'The exchange will be created in pending state. Countdown begins after the other side accepts the request.'}
                 </Text>
               </View>
 
@@ -1738,6 +2141,73 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.primary,
     fontWeight: '700',
+  },
+  exchangeActionCard: {
+    marginTop: 10,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+  },
+  exchangeActionCopy: {
+    gap: 4,
+  },
+  exchangeActionTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  exchangeActionBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  floatingTaskBtn: {
+    position: 'absolute',
+    left: 14,
+    bottom: 94,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 4,
+    zIndex: 12,
+  },
+  exchangeActionHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  quickActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  quickActionCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  quickActionTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  quickActionBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
   gateNotice: {
     backgroundColor: colors.warning + '22',
@@ -2259,6 +2729,76 @@ const styles = StyleSheet.create({
   },
   sheetPrimaryText: {
     ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  sheetSuccessBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.success,
+  },
+  sheetSuccessText: {
+    ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  popupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  popupDismissArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  popupCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  popupTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+  },
+  popupBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  popupActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  popupSecondaryBtn: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  popupSecondaryText: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  popupSuccessBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  popupSuccessText: {
+    ...typography.bodyBold,
     color: colors.textWhite,
   },
 });

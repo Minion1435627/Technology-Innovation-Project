@@ -14,6 +14,34 @@ export const mockUser = {
   weeklyScore: 185,
   weeklyRank: 4,
   avatar: null,
+  bio: 'Friendly local neighbour who often helps with quick exchanges, study support, and borrowed items.',
+  reviews: [
+    {
+      id: 'mr1',
+      reviewer: 'David M.',
+      stars: 5,
+      comment: 'Alex was super helpful and returned everything in perfect condition. Would definitely help again!',
+      tags: ['Reliable', 'Friendly', 'Returned on time'],
+      date: '2 days ago',
+    },
+    {
+      id: 'mr2',
+      reviewer: 'Emma R.',
+      stars: 5,
+      comment: 'Great neighbour, responded instantly. Exactly what this app is about.',
+      tags: ['Fast response', 'Friendly'],
+      date: '1 week ago',
+    },
+    {
+      id: 'mr3',
+      reviewer: 'Nara P.',
+      stars: 4,
+      comment: 'Helpful and kind. Picked up the food exactly on time.',
+      tags: ['Friendly', 'Reliable'],
+      date: '2 weeks ago',
+    },
+  ],
+  posts: [],
 };
 
 // Full profiles for other users (for UserProfileScreen)
@@ -218,6 +246,32 @@ export const mockOtherUsers = {
     ],
   },
 };
+
+export function addReviewToUserProfile(userId, review) {
+  const targetUser = userId === mockUser.id ? mockUser : mockOtherUsers[userId];
+  if (!targetUser) return null;
+
+  const safeStars = Math.max(1, Math.min(5, review.stars || 0));
+  const nextReview = {
+    id: `r_${Date.now()}`,
+    reviewer: review.reviewer || mockUser.name,
+    stars: safeStars,
+    comment: review.comment?.trim() || 'Great exchange experience.',
+    tags: Array.isArray(review.tags) ? review.tags : [],
+    date: review.date || 'Just now',
+  };
+
+  const previousCount = targetUser.totalReviews || targetUser.reviews?.length || 0;
+  const previousAverage = Number(targetUser.stars || 0);
+  const nextCount = previousCount + 1;
+  const nextAverage = ((previousAverage * previousCount) + safeStars) / nextCount;
+
+  targetUser.reviews = [nextReview, ...(targetUser.reviews || [])];
+  targetUser.totalReviews = nextCount;
+  targetUser.stars = Number(nextAverage.toFixed(1));
+
+  return nextReview;
+}
 
 
 // Marker in the map

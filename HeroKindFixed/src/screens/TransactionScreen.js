@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, TextInput,
+  ScrollView, Alert, TextInput, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
+import { addReviewToUserProfile, mockUser } from '../data/mockData';
 
 const REVIEW_TAG_OPTIONS = ['Friendly', 'On time', 'Clear communication', 'Reliable', 'Helpful'];
 
@@ -75,23 +76,29 @@ function Countdown({ targetDate }) {
 
 export default function TransactionScreen({ navigation, route }) {
   const { transaction: initial } = route.params;
+  const focusReviewPrompt = route?.params?.focusReviewPrompt;
   const [tx, setTx] = useState(initial);
   const [reviewPromptVisible, setReviewPromptVisible] = useState(initial.status === 'completed');
   const [selectedReviewTags, setSelectedReviewTags] = useState([]);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [submittedReviewId, setSubmittedReviewId] = useState(null);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const scrollRef = useRef(null);
+  const reviewPromptYRef = useRef(0);
 
   const isProvider = tx.myRole === 'provider';
   const isRequester = tx.myRole === 'requester';
   const isBorrow = tx.type === 'borrow';
+  const canAcceptExchange = tx.status === 'pending' && tx.pendingBy && tx.pendingBy !== tx.myRole;
   const flowLabel = isBorrow ? 'Borrowed item' : 'Help / service';
   const assetLabel = isBorrow ? 'ITEM' : 'TASK';
-  const startEventLabel = isBorrow ? 'Handover date' : 'Task start date';
+  const startEventLabel = 'Accepted at';
   const deadlineLabel = isBorrow ? 'Return deadline' : 'Task window ends';
   const countdownLabel = isBorrow ? 'Time left' : 'Time remaining';
-  const providerActionLabel = isBorrow ? 'Confirm Handover' : 'Confirm Task Started';
-  const completionActionLabel = isBorrow ? 'Confirm Item Returned' : 'Mark Task Completed';
+  const acceptActionLabel = 'Accept Exchange';
+  const completionActionLabel = isBorrow ? 'Complete Exchange' : 'Mark Task Completed';
   const partyArrowLabel = isBorrow ? 'lends to' : 'helps';
   const cfg = STATUS_CONFIG[tx.status];
   const overdueMs = tx.agreedReturnDate ? Date.now() - new Date(tx.agreedReturnDate).getTime() : 0;
@@ -102,19 +109,19 @@ export default function TransactionScreen({ navigation, route }) {
     : tx.status === 'disputed'
       ? 'Issue under review'
       : tx.status === 'pending'
-        ? (isBorrow ? 'Waiting for handover confirmation' : 'Waiting for task start confirmation')
-        : (isBorrow ? 'Provider confirms return to finish' : 'Provider marks task completed to finish');
+        ? 'Waiting for the other side to accept the start request'
+        : 'The exchange is active until the supplier marks it completed';
 
-  const markInProgress = () => {
-    const title = isBorrow ? 'Confirm Handover' : 'Confirm Task Start';
+  const acceptExchange = () => {
+    const title = 'Accept Exchange';
     const message = isBorrow
-      ? `Confirm that you have handed "${tx.item}" to ${tx.requester.name}? The return countdown starts now.`
-      : `Confirm that you have started "${tx.item}" with ${tx.requester.name}? The task countdown starts now.`;
+      ? `Accept this borrowed-item start request for "${tx.item}"? The exchange will move into progress immediately.`
+      : `Accept this help-task start request for "${tx.item}"? The exchange will move into progress immediately.`;
 
     Alert.alert(title, message, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: providerActionLabel,
+        text: acceptActionLabel,
         onPress: () => {
           setTx(t => ({
             ...t,
@@ -128,22 +135,13 @@ export default function TransactionScreen({ navigation, route }) {
   };
 
   const confirmCompletion = () => {
-    const title = isBorrow ? 'Confirm Item Returned' : 'Mark Task Completed';
-    const message = isBorrow
-      ? `Has "${tx.item}" been returned by ${tx.requester.name} in good condition?`
-      : `Has "${tx.item}" been fully completed for ${tx.requester.name}?`;
-    const confirmText = isBorrow ? 'Yes, Confirm Return' : 'Yes, Mark Complete';
+    setCompleteConfirmOpen(true);
+  };
 
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: confirmText,
-        onPress: () => {
-          setTx(t => ({ ...t, status: 'completed', completedDate: new Date().toISOString() }));
-          setReviewPromptVisible(true);
-        },
-      },
-    ]);
+  const handleConfirmCompletion = () => {
+    setTx(t => ({ ...t, status: 'completed', completedDate: new Date().toISOString() }));
+    setReviewPromptVisible(true);
+    setCompleteConfirmOpen(false);
   };
 
   const raiseDispute = () => {
@@ -176,9 +174,17 @@ export default function TransactionScreen({ navigation, route }) {
       return;
     }
 
+    const reviewedUserId = isProvider ? tx.requester.id : tx.provider.id;
+    const nextReview = addReviewToUserProfile(reviewedUserId, {
+      reviewer: mockUser.name,
+      stars: reviewRating,
+      comment: reviewComment,
+      tags: selectedReviewTags,
+    });
+    setSubmittedReviewId(nextReview?.id ?? null);
     setReviewSubmitted(true);
     setReviewPromptVisible(false);
-    Alert.alert('Review submitted', 'Your feedback has been saved for this exchange.');
+    Alert.alert('Review submitted', 'Your feedback has been saved and will now appear on the user profile.');
   };
 
   const formatDate = iso => {
@@ -192,6 +198,19 @@ export default function TransactionScreen({ navigation, route }) {
     });
   };
 
+  useEffect(() => {
+    if (!focusReviewPrompt || tx.status !== 'completed' || !reviewPromptVisible) return;
+
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(reviewPromptYRef.current - 24, 0),
+        animated: true,
+      });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [focusReviewPrompt, tx.status, reviewPromptVisible]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
@@ -203,6 +222,7 @@ export default function TransactionScreen({ navigation, route }) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
@@ -359,8 +379,8 @@ export default function TransactionScreen({ navigation, route }) {
             <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
             <Text style={styles.infoText}>
               {isBorrow
-                ? 'If the item is not returned and confirmed within 3 days, the requester account will be automatically locked.'
-                : 'This help task is now in progress. The countdown will keep running until the provider marks the task completed.'}
+                ? 'This borrowed-item exchange is now active. The supplier will complete it after the return is confirmed.'
+                : 'This help task is now in progress. The countdown will keep running until the supplier marks the task completed.'}
             </Text>
           </View>
         )}
@@ -375,7 +395,12 @@ export default function TransactionScreen({ navigation, route }) {
         )}
 
         {tx.status === 'completed' && reviewPromptVisible && !reviewSubmitted && (
-          <View style={styles.reviewCard}>
+          <View
+            style={styles.reviewCard}
+            onLayout={event => {
+              reviewPromptYRef.current = event.nativeEvent.layout.y;
+            }}
+          >
             <View style={styles.reviewHeader}>
               <Ionicons name="star-outline" size={18} color={colors.success} />
               <Text style={styles.reviewTitle}>Review prompt unlocked</Text>
@@ -463,15 +488,38 @@ export default function TransactionScreen({ navigation, route }) {
             {!!reviewComment.trim() && (
               <Text style={styles.submittedComment}>“{reviewComment.trim()}”</Text>
             )}
+            <TouchableOpacity
+              style={styles.profileReviewBtn}
+              onPress={() =>
+                navigation.navigate('UserProfile', {
+                  userId: isProvider ? tx.requester.id : tx.provider.id,
+                  highlightReviewId: submittedReviewId,
+                })
+              }
+            >
+              <Ionicons name="person-circle-outline" size={18} color={colors.primary} />
+              <Text style={styles.profileReviewBtnText}>
+                View on Profile
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
         <View style={styles.actions}>
-          {isProvider && tx.status === 'pending' && (
-            <TouchableOpacity style={styles.primaryBtn} onPress={markInProgress}>
+          {tx.status === 'pending' && canAcceptExchange && (
+            <TouchableOpacity style={styles.primaryBtn} onPress={acceptExchange}>
               <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-              <Text style={styles.primaryBtnText}>{providerActionLabel}</Text>
+              <Text style={styles.primaryBtnText}>{acceptActionLabel}</Text>
             </TouchableOpacity>
+          )}
+
+          {tx.status === 'pending' && !canAcceptExchange && (
+            <View style={styles.reminderBox}>
+              <Ionicons name="time-outline" size={18} color={colors.warning} />
+              <Text style={styles.reminderText}>
+                A start request has been sent. This exchange will stay pending until the other side accepts it.
+              </Text>
+            </View>
           )}
 
           {isProvider && (tx.status === 'in_progress' || tx.status === 'overdue') && (
@@ -486,8 +534,8 @@ export default function TransactionScreen({ navigation, route }) {
               <Ionicons name="alarm-outline" size={18} color={colors.warning} />
               <Text style={styles.reminderText}>
                 {isBorrow
-                  ? `Return "${tx.item}" to ${tx.provider.name} before the deadline to keep your account in good standing.`
-                  : `Stay in touch with ${tx.provider.name} while "${tx.item}" is in progress. The provider will mark the task completed when it is done.`}
+                  ? `Stay in touch with ${tx.provider.name} while "${tx.item}" is active. The supplier will complete the exchange after return.`
+                  : `Stay in touch with ${tx.provider.name} while "${tx.item}" is in progress. The supplier will mark the task completed when it is done.`}
               </Text>
             </View>
           )}
@@ -525,6 +573,34 @@ export default function TransactionScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={completeConfirmOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCompleteConfirmOpen(false)}
+      >
+        <View style={styles.popupBackdrop}>
+          <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setCompleteConfirmOpen(false)} />
+          <View style={styles.popupCard}>
+            <Text style={styles.popupTitle}>{isBorrow ? 'Complete Exchange' : 'Mark Task Completed'}</Text>
+            <Text style={styles.popupBody}>
+              {isBorrow
+                ? 'Please confirm the item has been returned before closing this exchange.'
+                : 'Please confirm the task has been completed before closing this exchange.'}
+            </Text>
+
+            <View style={styles.popupActions}>
+              <TouchableOpacity style={styles.popupSecondaryBtn} onPress={() => setCompleteConfirmOpen(false)}>
+                <Text style={styles.popupSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.popupSuccessBtn} onPress={handleConfirmCompletion}>
+                <Text style={styles.popupSuccessText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -766,12 +842,10 @@ const styles = StyleSheet.create({
   reviewLaterBtn: {
     flex: 1,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: 'transparent',
   },
   reviewLaterBtnText: {
     ...typography.smallBold,
@@ -802,6 +876,21 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 20,
     fontStyle: 'italic',
+  },
+  profileReviewBtn: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  profileReviewBtnText: {
+    ...typography.smallBold,
+    color: colors.primary,
   },
   actions: { gap: 10 },
   primaryBtn: {
@@ -847,4 +936,63 @@ const styles = StyleSheet.create({
     padding: 13,
   },
   chatBtnText: { ...typography.button, color: colors.primary },
+  popupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  popupDismissArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  popupCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  popupTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+  },
+  popupBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  popupActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  popupSecondaryBtn: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  popupSecondaryText: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  popupSuccessBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  popupSuccessText: {
+    ...typography.bodyBold,
+    color: colors.textWhite,
+  },
 });
