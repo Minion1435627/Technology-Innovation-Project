@@ -5,6 +5,7 @@ export const mockUser = {
   neighbourhood: 'Carlton North',
   joinDate: 'Jan 2025',
   verified: true,
+  bio: 'Happy to help neighbours nearby',
   level: 3,
   levelName: 'Trusted Neighbour',
   xp: 420,
@@ -18,6 +19,18 @@ export const mockUser = {
 
 // Full profiles for other users (for UserProfileScreen)
 export const mockOtherUsers = {
+  u1: {
+    id: 'u1', name: 'Alex Chen', gender: 'Male', neighbourhood: 'Carlton North', joinDate: 'Jan 2025',
+    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 34,
+    bio: 'Happy to help neighbours nearby',
+    weeklyScore: 185, weeklyRank: 4,
+    reviews: [
+      { id: 'r1', reviewer: 'David M.', stars: 5, comment: 'Alex was super helpful and returned everything in perfect condition.', tags: ['Reliable', 'Friendly', 'On time'], date: '2 days ago' },
+      { id: 'r2', reviewer: 'Emma R.', stars: 5, comment: 'Great neighbour, responded instantly.', tags: ['Fast response'], date: '1 week ago' },
+      { id: 'r3', reviewer: 'Nara P.', stars: 4, comment: 'Helpful and kind. Picked up the food on time.', tags: ['Friendly', 'Reliable'], date: '2 weeks ago' },
+    ],
+    posts: [],
+  },
   u2: {
     id: 'u2', name: 'Mia L.', gender: 'Female', neighbourhood: 'Northcote', joinDate: 'Mar 2025',
     verified: true, level: 2, levelName: 'Helper', stars: 4.6, totalReviews: 18,

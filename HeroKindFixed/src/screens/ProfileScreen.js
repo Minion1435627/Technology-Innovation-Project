@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Alert,
@@ -12,198 +12,278 @@ import { mockUser, mockReviews, mockTransactions } from '../data/mockData';
 import { usePosts } from '../context/PostsContext';
 
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
-const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
-const GENDER_COLOR = { Male: '#4dabf7', Female: '#f783ac', 'Non-binary': '#a78bfa' };
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
+
 const ACHIEVEMENTS = [
-  { id: 'a1', emoji: '🔧', label: 'Tool Lender', desc: '5+ tools lent' },
-  { id: 'a2', emoji: '🍱', label: 'Food Sharer', desc: '3+ food shared' },
-  { id: 'a3', emoji: '⚡', label: 'Fast Responder', desc: 'Avg reply < 5 min' },
-  { id: 'a4', emoji: '💯', label: 'Reliable', desc: '10+ 5-star reviews' },
+  { id: 'a1', emoji: '🔧', label: 'Tool Lender',     desc: '5+ tools lent',       unlocked: true  },
+  { id: 'a2', emoji: '🍱', label: 'Food Sharer',     desc: '3+ food shared',      unlocked: true  },
+  { id: 'a3', emoji: '⚡', label: 'Fast Responder',  desc: 'Avg reply < 5 min',   unlocked: true  },
+  { id: 'a4', emoji: '💯', label: 'Reliable',        desc: '10+ 5-star reviews',  unlocked: true  },
+  { id: 'a5', emoji: '🦸', label: 'Community Hero',  desc: 'Reach Level 5',       unlocked: false },
 ];
+
+const STATUS_COLOR = {
+  pending:     '#f59f00',
+  in_progress: '#1c7ed6',
+  overdue:     '#e03131',
+  disputed:    '#9c36b5',
+};
+const STATUS_LABEL = {
+  pending:     'Pending',
+  in_progress: 'In Progress',
+  overdue:     'Overdue',
+  disputed:    'Disputed',
+};
+
+function formatDue(tx) {
+  const due = new Date(tx.agreedReturnDate);
+  const now = new Date();
+  const diffDays = Math.round((due - now) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) {
+    const n = Math.abs(diffDays);
+    return `${n} day${n === 1 ? '' : 's'} late`;
+  }
+  if (diffDays === 0) return 'Due today';
+  if (diffDays === 1) return 'Due tomorrow';
+  return `Due in ${diffDays} days`;
+}
 
 export default function ProfileScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('reviews');
   const { posts, removePost } = usePosts();
   const user = mockUser;
-  const xpPercent = (user.xp / user.xpNext) * 100;
+  const xpPercent = Math.min(100, (user.xp / user.xpNext) * 100);
 
   const myNeeds    = posts.filter(p => p.poster.id === user.id && p.type === 'need');
   const mySupplies = posts.filter(p => p.poster.id === user.id && p.type === 'supply');
+  const activeExchanges    = mockTransactions.filter(t => t.status !== 'completed');
+  const completedExchanges = mockTransactions.filter(t => t.status === 'completed');
+
+  const scrollRef    = useRef(null);
+  const tabSectionY  = useRef(0);
+
+  const scrollTo = (y) => scrollRef.current?.scrollTo({ y, animated: true });
 
   const handleDelete = (post) => {
-    Alert.alert(
-      'Delete Post',
-      `Remove "${post.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => removePost(post.id) },
-      ]
-    );
+    Alert.alert('Delete Post', `Remove "${post.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => removePost(post.id) },
+    ]);
   };
+
+  const goTab = (key) => {
+    setActiveTab(key);
+    setTimeout(() => scrollTo(tabSectionY.current - 8), 50);
+  };
+
+  const QUICK_ACTIONS = [
+    { id: 'needs',   label: 'My Needs',  icon: 'help-circle',  color: colors.need,           onPress: () => goTab('needs') },
+    { id: 'supply',  label: 'My Supply', icon: 'gift',         color: colors.supply,         onPress: () => goTab('supply') },
+    { id: 'history', label: 'History',   icon: 'time-outline', color: colors.textSecondary,
+      onPress: () => Alert.alert('History', `${completedExchanges.length} completed exchange${completedExchanges.length === 1 ? '' : 's'} so far.`) },
+  ];
+
+  const xpRemaining = Math.max(0, user.xpNext - user.xp);
+  const xpHint      = `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${user.level + 1}`;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.container}>
-
-        {/* Header actions */}
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ---------- Top header ---------- */}
         <View style={styles.topActions}>
           <Text style={styles.pageTitle}>Profile</Text>
           <View style={styles.topRight}>
-            <TouchableOpacity onPress={() => navigation.navigate('Leaderboard')}>
-              <Text style={styles.leaderboardLink}>🏆 Leaderboard</Text>
+            <TouchableOpacity
+              style={styles.topPillBtn}
+              onPress={() => navigation.navigate('Leaderboard')}
+            >
+              <Ionicons name="trophy" size={14} color={colors.primary} />
+              <Text style={styles.topPillText}>Leaderboard</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.settingsBtn}>
-              <Text style={styles.settingsIcon}>⚙️</Text>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => navigation.navigate('Settings')}
+            >
+              <Ionicons name="settings-outline" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Profile card */}
+        {/* ---------- Profile card ---------- */}
         <View style={styles.profileCard}>
-          {/* Avatar */}
-          <View style={styles.avatarSection}>
-            <Avatar name={user.name} size={88} level={user.level} showBadge={false} />
-            <TouchableOpacity style={styles.editAvatarBtn}>
-              <Text style={styles.editAvatarText}>Edit avatar</Text>
-            </TouchableOpacity>
+          <View style={styles.profileTop}>
+            <Avatar name={user.name} size={84} level={user.level} showBadge />
+            <View style={styles.identity}>
+              <View style={styles.nameRow}>
+                <Text style={styles.userName} numberOfLines={1}>{user.name}</Text>
+                {user.verified && (
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="checkmark-circle" size={12} color={colors.primary} />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.userMeta} numberOfLines={1}>
+                {user.neighbourhood} · Joined {user.joinDate}
+              </Text>
+              {!!user.bio && (
+                <Text style={styles.userBio} numberOfLines={2}>“{user.bio}”</Text>
+              )}
+            </View>
           </View>
 
-          {/* Name & info */}
-          <View style={styles.userInfo}>
-            <View style={styles.nameRow}>
-              <Text style={styles.userName}>{user.name}</Text>
-              {user.verified && (
-                <View style={styles.verifiedBadge}>
-                  <Text style={styles.verifiedText}>✓ Verified</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.userMetaRow}>
-              {user.gender && (
-                <View style={[styles.genderBadge, { backgroundColor: GENDER_COLOR[user.gender] + '22', borderColor: GENDER_COLOR[user.gender] }]}>
-                  <Text style={[styles.genderBadgeText, { color: GENDER_COLOR[user.gender] }]}>
-                    {GENDER_ICON[user.gender]} {user.gender}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.userMeta}>📍 {user.neighbourhood} · Joined {user.joinDate}</Text>
-            <View style={styles.statsRow}>
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>⭐ {user.stars}</Text>
-                <Text style={styles.statLabel}>{user.totalReviews} reviews</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>#{user.weeklyRank}</Text>
-                <Text style={styles.statLabel}>This week</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{user.weeklyScore}</Text>
-                <Text style={styles.statLabel}>Weekly pts</Text>
-              </View>
-            </View>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnPrimary]}
+              onPress={() => Alert.alert('Edit Profile', 'Edit profile coming soon.')}
+            >
+              <Ionicons name="create-outline" size={15} color={colors.textWhite} />
+              <Text style={styles.actionBtnPrimaryText}>Edit Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnGhost]}
+              onPress={() => navigation.navigate('UserProfile', { userId: user.id })}
+            >
+              <Ionicons name="eye-outline" size={15} color={colors.primary} />
+              <Text style={styles.actionBtnGhostText}>View Public Profile</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Level progress */}
+        {/* ---------- Stats strip ---------- */}
+        <View style={styles.statsStrip}>
+          <View style={styles.statBox}>
+            <Text style={styles.statEmoji}>⭐</Text>
+            <Text style={styles.statValue}>{user.stars.toFixed(1)}</Text>
+            <Text style={styles.statLabel}>Rating</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <Text style={styles.statEmoji}>🧾</Text>
+            <Text style={styles.statValue}>{user.totalReviews}</Text>
+            <Text style={styles.statLabel}>Reviews</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <Text style={styles.statEmoji}>🏆</Text>
+            <Text style={styles.statValue}>#{user.weeklyRank}</Text>
+            <Text style={styles.statLabel}>This week</Text>
+          </View>
+        </View>
+
+        {/* ---------- Level card ---------- */}
         <View style={styles.levelCard}>
           <View style={styles.levelHeader}>
             <Text style={styles.levelEmoji}>{LEVEL_EMOJIS[user.level - 1]}</Text>
-            <View>
-              <Text style={styles.levelName}>Level {user.level} — {LEVEL_NAMES[user.level - 1]}</Text>
-              <Text style={styles.levelXP}>{user.xp} / {user.xpNext} XP to Level {user.level + 1}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.levelName}>
+                Level {user.level} — {LEVEL_NAMES[user.level - 1]}
+              </Text>
+              <Text style={styles.levelXP}>
+                {user.xp} / {user.xpNext} XP
+              </Text>
             </View>
+            <Text style={styles.levelPercent}>{Math.round(xpPercent)}%</Text>
           </View>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${xpPercent}%` }]} />
           </View>
           <View style={styles.levelTip}>
-            <Text style={styles.levelTipText}>
-              💡 Help 2 more neighbours this week to reach Level {user.level + 1}!
-            </Text>
+            <Text style={styles.levelTipText}>💡 {xpHint}</Text>
           </View>
         </View>
 
-        {/* Achievements */}
+        {/* ---------- Quick Actions ---------- */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickGrid}>
+            {QUICK_ACTIONS.map(q => (
+              <TouchableOpacity key={q.id} style={styles.quickCard} onPress={q.onPress}>
+                <View style={[styles.quickIconWrap, { backgroundColor: q.color + '22' }]}>
+                  <Ionicons name={q.icon} size={20} color={q.color} />
+                </View>
+                <Text style={styles.quickLabel}>{q.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ---------- Active Exchanges ---------- */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Active Exchanges</Text>
+            {activeExchanges.length > 0 && (
+              <TouchableOpacity onPress={() => Alert.alert('All exchanges', 'All-exchanges screen coming soon.')}>
+                <Text style={styles.viewAllLink}>View all</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {activeExchanges.length === 0 ? (
+            <View style={styles.emptyMini}>
+              <Text style={styles.emptyMiniText}>No active exchanges right now.</Text>
+            </View>
+          ) : activeExchanges.map(tx => {
+            const counterparty = tx.myRole === 'requester' ? tx.provider : tx.requester;
+            const direction    = tx.myRole === 'requester' ? 'From' : 'To';
+            return (
+              <TouchableOpacity
+                key={tx.id}
+                style={[styles.txCard, tx.status === 'overdue' && styles.txCardOverdue]}
+                onPress={() => navigation.navigate('Transaction', { transaction: tx })}
+              >
+                <View style={[styles.txStatusDot, { backgroundColor: STATUS_COLOR[tx.status] }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txItem} numberOfLines={1}>{tx.item}</Text>
+                  <Text style={styles.txWith} numberOfLines={1}>
+                    {direction} {counterparty.name} · {formatDue(tx)}
+                  </Text>
+                </View>
+                <View style={styles.txRight}>
+                  <Text style={[styles.txStatus, { color: STATUS_COLOR[tx.status] }]}>
+                    {STATUS_LABEL[tx.status]}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* ---------- Achievements ---------- */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Achievements</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.achieveScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {ACHIEVEMENTS.map(a => (
-              <View key={a.id} style={styles.achieveCard}>
-                <Text style={styles.achieveEmoji}>{a.emoji}</Text>
-                <Text style={styles.achieveLabel}>{a.label}</Text>
+              <View
+                key={a.id}
+                style={[styles.achieveCard, !a.unlocked && styles.achieveCardLocked]}
+              >
+                <Text style={[styles.achieveEmoji, !a.unlocked && { opacity: 0.4 }]}>
+                  {a.unlocked ? a.emoji : '🔒'}
+                </Text>
+                <Text style={[styles.achieveLabel, !a.unlocked && styles.achieveLabelLocked]}>
+                  {a.label}
+                </Text>
                 <Text style={styles.achieveDesc}>{a.desc}</Text>
               </View>
             ))}
           </ScrollView>
         </View>
 
-        {/* Active Exchanges */}
-        {mockTransactions.filter(t => t.status !== 'completed').length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Exchanges</Text>
-            {mockTransactions.filter(t => t.status !== 'completed').map(tx => {
-              const STATUS_COLOR = { pending: '#f59f00', in_progress: '#1c7ed6', overdue: '#e03131', disputed: '#9c36b5' };
-              const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', overdue: 'Overdue', disputed: 'Disputed' };
-              return (
-                <TouchableOpacity
-                  key={tx.id}
-                  style={[styles.txCard, tx.status === 'overdue' && styles.txCardOverdue]}
-                  onPress={() => navigation.navigate('Transaction', { transaction: tx })}
-                >
-                  <View style={styles.txLeft}>
-                    <View style={[styles.txStatusDot, { backgroundColor: STATUS_COLOR[tx.status] }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.txItem}>{tx.item}</Text>
-                      <Text style={styles.txWith}>
-                        {tx.myRole === 'requester' ? `From ${tx.provider.name}` : `To ${tx.requester.name}`}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.txRight}>
-                    <Text style={[styles.txStatus, { color: STATUS_COLOR[tx.status] }]}>
-                      {STATUS_LABEL[tx.status]}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Mini-game shortcuts */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mini-Games</Text>
-          <View style={styles.gamesRow}>
-            <TouchableOpacity
-              style={styles.gameCard}
-              onPress={() => navigation.navigate('Farmer')}
-            >
-              <Text style={styles.gameEmoji}>🌾</Text>
-              <Text style={styles.gameTitle}>Farmer</Text>
-              <Text style={styles.gameSub}>1 crop ready!</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.gameCard}
-              onPress={() => navigation.navigate('Fisher')}
-            >
-              <Text style={styles.gameEmoji}>🎣</Text>
-              <Text style={styles.gameTitle}>Fisher</Text>
-              <Text style={styles.gameSub}>Cast a line</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Content tabs */}
-        <View style={styles.tabBar}>
+        {/* ---------- Tabs ---------- */}
+        <View
+          onLayout={e => { tabSectionY.current = e.nativeEvent.layout.y; }}
+          style={styles.tabBar}
+        >
           {[
-            { key: 'reviews', label: 'Reviews', icon: 'star',         iconColor: '#FED330' },
-            { key: 'needs',   label: 'Needs',   icon: 'help-circle',  iconColor: colors.need },
-            { key: 'supply',  label: 'Supply',  icon: 'gift',         iconColor: colors.supply },
+            { key: 'reviews', label: 'Reviews', icon: 'star',        iconColor: '#FED330' },
+            { key: 'needs',   label: 'Needs',   icon: 'help-circle', iconColor: colors.need },
+            { key: 'supply',  label: 'Supply',  icon: 'gift',        iconColor: colors.supply },
           ].map(tab => (
             <TouchableOpacity
               key={tab.key}
@@ -224,7 +304,7 @@ export default function ProfileScreen({ navigation }) {
           ))}
         </View>
 
-        {/* Tab content */}
+        {/* ---------- Tab content ---------- */}
         {activeTab === 'reviews' && mockReviews.map(r => (
           <View key={r.id} style={styles.reviewCard}>
             <View style={styles.reviewHeader}>
@@ -305,8 +385,9 @@ export default function ProfileScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  container: { paddingBottom: 90 },
+  container: { paddingBottom: 100 },
 
+  /* Top bar */
   topActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -318,133 +399,163 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   pageTitle: { ...typography.h2, color: colors.textPrimary },
-  topRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  leaderboardLink: { ...typography.small, color: colors.primary },
-  settingsBtn: {},
-  settingsIcon: { fontSize: 20 },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  topPillBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 14,
+  },
+  topPillText: { ...typography.smallBold, color: colors.primary },
+  iconBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
 
+  /* Profile card */
   profileCard: {
     backgroundColor: colors.card,
-    padding: 20,
-    flexDirection: 'row',
-    gap: 16,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
+    gap: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  avatarSection: { alignItems: 'center', gap: 8 },
-  editAvatarBtn: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  editAvatarText: { ...typography.caption, color: colors.primary },
-  userInfo: { flex: 1, gap: 6 },
+  profileTop: { flexDirection: 'row', gap: 16, alignItems: 'center' },
+  identity: { flex: 1, gap: 4 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  userName: { ...typography.h3, color: colors.textPrimary },
-  verifiedBadge: { backgroundColor: colors.primaryLight, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  userName: { ...typography.h2, color: colors.textPrimary, maxWidth: '70%' },
+  verifiedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2,
+  },
   verifiedText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
   userMeta: { ...typography.small, color: colors.textSecondary },
-  userMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  genderBadge: {
-    flexDirection: 'row', borderWidth: 1, borderRadius: 12,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
-  genderBadgeText: { ...typography.caption, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  stat: { flex: 1, alignItems: 'center' },
-  statValue: { ...typography.bodyBold, color: colors.textPrimary },
-  statLabel: { ...typography.caption, color: colors.textMuted },
-  statDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  userBio: { ...typography.small, color: colors.textPrimary, fontStyle: 'italic', marginTop: 2 },
 
+  actionRow: { flexDirection: 'row', gap: 10 },
+  actionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, borderRadius: 12,
+  },
+  actionBtnPrimary: { backgroundColor: colors.primary },
+  actionBtnPrimaryText: { ...typography.smallBold, color: colors.textWhite },
+  actionBtnGhost: {
+    backgroundColor: colors.card,
+    borderWidth: 1, borderColor: colors.primary,
+  },
+  actionBtnGhostText: { ...typography.smallBold, color: colors.primary },
+
+  /* Stats strip */
+  statsStrip: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.card,
+    marginHorizontal: 16, marginTop: 14,
+    borderRadius: 18, paddingVertical: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+  },
+  statBox: { flex: 1, alignItems: 'center', gap: 2 },
+  statEmoji: { fontSize: 18 },
+  statValue: { ...typography.h4, color: colors.textPrimary },
+  statLabel: { ...typography.caption, color: colors.textMuted },
+  statDivider: { width: 1, height: 36, backgroundColor: colors.border },
+
+  /* Level card */
   levelCard: {
     backgroundColor: colors.card,
-    margin: 16,
-    borderRadius: 20,
-    padding: 16,
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    marginHorizontal: 16, marginTop: 14,
+    borderRadius: 20, padding: 16, gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
   levelHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  levelEmoji: { fontSize: 36 },
+  levelEmoji: { fontSize: 32 },
   levelName: { ...typography.h4, color: colors.textPrimary },
   levelXP: { ...typography.small, color: colors.textSecondary },
+  levelPercent: { ...typography.bodyBold, color: colors.primary },
   progressBar: {
-    height: 8,
-    backgroundColor: colors.background,
-    borderRadius: 4,
-    overflow: 'hidden',
+    height: 8, backgroundColor: colors.background,
+    borderRadius: 4, overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 4,
-  },
+  progressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 4 },
   levelTip: { backgroundColor: colors.primaryLight, borderRadius: 10, padding: 10 },
   levelTipText: { ...typography.small, color: colors.primary },
 
-  section: { paddingHorizontal: 16, marginBottom: 8 },
-  sectionTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: 12 },
-  txCard: {
+  /* Sections */
+  section: { paddingHorizontal: 16, marginTop: 18 },
+  sectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 8,
+    marginBottom: 10,
+  },
+  sectionTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: 10 },
+  viewAllLink: { ...typography.smallBold, color: colors.primary, marginBottom: 10 },
+
+  /* Quick actions */
+  quickGrid: { flexDirection: 'row', gap: 10 },
+  quickCard: {
+    flex: 1, backgroundColor: colors.card,
+    borderRadius: 14, paddingVertical: 14, paddingHorizontal: 10,
+    alignItems: 'center', gap: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  quickIconWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  quickLabel: { ...typography.smallBold, color: colors.textPrimary, textAlign: 'center' },
+
+  /* Transaction cards */
+  txCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.card, borderRadius: 14,
+    padding: 14, marginBottom: 8, gap: 10,
     borderWidth: 1, borderColor: colors.border,
   },
   txCardOverdue: { borderColor: '#e03131', backgroundColor: '#fff5f5' },
-  txLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   txStatusDot: { width: 10, height: 10, borderRadius: 5 },
   txItem: { ...typography.smallBold, color: colors.textPrimary },
   txWith: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   txRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   txStatus: { ...typography.caption, fontWeight: '700' },
-  achieveScroll: {},
+
+  emptyMini: {
+    backgroundColor: colors.card, borderRadius: 14,
+    paddingVertical: 18, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+  },
+  emptyMiniText: { ...typography.small, color: colors.textMuted },
+
+  /* Achievements */
   achieveCard: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 14,
-    marginRight: 10,
-    alignItems: 'center',
-    width: 100,
-    gap: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    borderRadius: 16, padding: 14,
+    marginRight: 10, alignItems: 'center',
+    width: 110, gap: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  achieveCardLocked: {
+    backgroundColor: colors.background,
+    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+    shadowOpacity: 0,
   },
   achieveEmoji: { fontSize: 28 },
   achieveLabel: { ...typography.smallBold, color: colors.textPrimary, textAlign: 'center' },
+  achieveLabelLocked: { color: colors.textMuted },
   achieveDesc: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
 
-  gamesRow: { flexDirection: 'row', gap: 12 },
-  gameCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  gameEmoji: { fontSize: 36 },
-  gameTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  gameSub: { ...typography.small, color: colors.textSecondary },
-
+  /* Tabs */
   tabBar: {
     flexDirection: 'row',
     backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    marginTop: 18,
+    borderTopWidth: 1, borderTopColor: colors.border,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
     marginBottom: 4,
   },
   tab: {
@@ -456,18 +567,13 @@ const styles = StyleSheet.create({
   tabText: { ...typography.small, color: colors.textSecondary },
   tabTextActive: { color: colors.primary, fontWeight: '600' },
 
+  /* Reviews */
   reviewCard: {
     backgroundColor: colors.card,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    borderRadius: 16,
-    padding: 14,
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    marginHorizontal: 16, marginVertical: 6,
+    borderRadius: 16, padding: 14, gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
   reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   reviewMeta: { flex: 1 },
@@ -478,21 +584,16 @@ const styles = StyleSheet.create({
   reviewTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   reviewTag: {
     backgroundColor: colors.primaryLight,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3,
   },
   reviewTagText: { ...typography.caption, color: colors.primary },
 
+  /* Needs / Supply list */
   historyCard: {
     backgroundColor: colors.card,
-    marginHorizontal: 16,
-    marginVertical: 4,
-    borderRadius: 14,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    marginHorizontal: 16, marginVertical: 4,
+    borderRadius: 14, padding: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
   },
   historyDot: { width: 10, height: 10, borderRadius: 5 },
   historyBody: { flex: 1 },
