@@ -349,7 +349,7 @@ export default function MapScreen({ navigation }) {
                         <View style={styles.sheetInfo}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={styles.sheetName}>{pin.poster.name}</Text>
-                            {pin.isFriendPost && <Text style={styles.sheetFriendTag}>💙</Text>}
+                            {pin.isFriendPost && <Text style={styles.sheetFriendTag}></Text>}
                           </View>
                           <Text style={styles.sheetCategory} numberOfLines={1}>{pin.title}</Text>
                           <Text style={styles.sheetCategorySub}>{pin.category}</Text>

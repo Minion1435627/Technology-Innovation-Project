@@ -214,7 +214,11 @@ export default function ProfileScreen({ navigation }) {
             </View>
           ) : (
             <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-              {friendIds.map(fid => {
+              {[...friendIds].sort((a, b) => {
+                const nameA = mockOtherUsers[a]?.name ?? '';
+                const nameB = mockOtherUsers[b]?.name ?? '';
+                return nameA.localeCompare(nameB);
+              }).map(fid => {
                 const friend = mockOtherUsers[fid];
                 if (!friend) return null;
                 return (

@@ -90,8 +90,8 @@ const cropLabel = (plot) => {
 };
 
 export default function FarmerScreen({ navigation }) {
-  const playerLevel = Math.max(mockUser.level, getLevelFromScore(mockUser.weeklyScore));
-  const levelName = LEVEL_RULES.find(rule => rule.level === playerLevel)?.name || mockUser.levelName;
+  const playerLevel = mockUser.level;
+  const levelName = mockUser.levelName;
   const nextLevel = getNextLevelRule(playerLevel);
   const unlockedSeeds = SEED_PACKETS.filter(seed => seed.level <= playerLevel);
 
@@ -248,8 +248,8 @@ export default function FarmerScreen({ navigation }) {
             <Text style={styles.levelProgressTitle}>Level {playerLevel} · {levelName}</Text>
             <Text style={styles.levelProgressText}>
               {nextLevel
-                ? `${mockUser.weeklyScore}/${nextLevel.score} weekly points to unlock Level ${nextLevel.level} seeds`
-                : `${mockUser.weeklyScore} weekly points · all seed packets unlocked`}
+                ? `${mockUser.xp}/${mockUser.xpNext} XP to unlock Level ${nextLevel.level} seeds`
+                : `${mockUser.xp} XP · all seed packets unlocked`}
             </Text>
           </View>
           <Ionicons name="sparkles-outline" size={20} color="#b58935" />

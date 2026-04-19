@@ -87,8 +87,8 @@ const pickWeighted = (items, getWeight) => {
 };
 
 export default function FisherScreen({ navigation }) {
-  const playerLevel = Math.max(mockUser.level, getLevelFromScore(mockUser.weeklyScore));
-  const levelName = LEVEL_RULES.find(rule => rule.level === playerLevel)?.name || mockUser.levelName;
+  const playerLevel = mockUser.level;
+  const levelName = mockUser.levelName;
   const [activeTab, setActiveTab] = useState('game');
   const [coins, setCoins] = useState(48);
   const [baitStock, setBaitStock] = useState({ worm: 5, shrimp: 2, fly: 1, minnow: 0 });

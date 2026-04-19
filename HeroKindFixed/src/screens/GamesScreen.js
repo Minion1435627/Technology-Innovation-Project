@@ -35,14 +35,7 @@ export default function GamesScreen({ navigation }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Mini-Games</Text>
-          <Text style={styles.headerSub}>Take a break and earn bonus XP</Text>
-        </View>
-        <View style={styles.xpPill}>
-          <Ionicons name="star" size={13} color="#f5a623" />
-          <Text style={styles.xpPillText}>Earn XP</Text>
-        </View>
+        <Text style={styles.headerTitle}>Mini-Games</Text>
       </View>
 
       <ScrollView
@@ -52,7 +45,7 @@ export default function GamesScreen({ navigation }) {
         {/* Banner */}
         <View style={styles.banner}>
           <Ionicons name="game-controller" size={18} color={colors.primaryDark} />
-          <Text style={styles.bannerText}>Play daily to climb the leaderboard!</Text>
+          <Text style={styles.bannerText}>Take a break. Have some fun!</Text>
         </View>
 
         {/* Cards */}
@@ -74,10 +67,6 @@ export default function GamesScreen({ navigation }) {
                 </View>
 
                 <View style={styles.stripRight}>
-                  <View style={styles.xpTag}>
-                    <Ionicons name="star" size={11} color="#f5a623" />
-                    <Text style={styles.xpTagText}>{game.xp}</Text>
-                  </View>
                   <View style={[styles.playBtn, { backgroundColor: game.badgeColor }]}>
                     <Text style={styles.playBtnText}>Play</Text>
                     <Ionicons name="play" size={11} color="#fff" />
