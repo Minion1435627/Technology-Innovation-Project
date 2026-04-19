@@ -77,11 +77,11 @@ const EXCHANGE_META = {
   c7: {
     state: 'in_progress',
     type: 'service',
-    myRole: 'provider',
+    myRole: 'requester',
     typeLabel: 'Help / service',
     statusLabel: 'In Progress',
     countdownText: 'Task window ends in 2h',
-    summaryText: 'Use this thread to test provider task completion',
+    summaryText: 'This help task is in progress and waiting for the provider to mark it completed',
     actionLabel: 'View Exchange',
   },
   c8: {
