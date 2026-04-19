@@ -13,7 +13,8 @@ import Avatar from '../components/Avatar';
 import UrgencyBadge from '../components/UrgencyBadge';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
-import { mockUser, mockChats } from '../data/mockData';
+import { usePrivacy } from '../context/PrivacyContext';
+import { mockUser, mockOtherUsers, mockChats } from '../data/mockData';
 
 // Distance options in km
 const DISTANCE_OPTIONS = [0.5, 1, 2, 5];
@@ -86,6 +87,8 @@ export default function MapScreen({ navigation }) {
   const mapRef  = useRef(null);
   const { posts, removePost } = usePosts();
   const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
+  const { locationSettings } = usePrivacy();
+  const { useLocationForMap } = locationSettings;
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [nearbyOpen, setNearbyOpen] = useState(false);
@@ -112,7 +115,7 @@ export default function MapScreen({ navigation }) {
   }, []);
 
   const recenterMap = () => {
-    const loc = userLocation ?? FALLBACK_LOCATION;
+    const loc = useLocationForMap ? (userLocation ?? FALLBACK_LOCATION) : FALLBACK_LOCATION;
     mapRef.current?.animateToRegion({
       latitude: loc.latitude,
       longitude: loc.longitude,
@@ -121,7 +124,31 @@ export default function MapScreen({ navigation }) {
     }, 500);
   };
 
-  const centre = userLocation ?? FALLBACK_LOCATION;
+  useEffect(() => {
+    recenterMap();
+  }, [useLocationForMap]);
+
+  const centre = useLocationForMap ? (userLocation ?? FALLBACK_LOCATION) : FALLBACK_LOCATION;
+
+  const getPosterProfile = (poster) => {
+    if (!poster) return null;
+    if (poster.id === mockUser.id) return mockUser;
+    return mockOtherUsers[poster.id] ?? poster;
+  };
+
+  const getPosterWithPrivacy = (poster) => {
+    const profile = getPosterProfile(poster);
+    return {
+      ...profile,
+      ...poster,
+      messagePrivacy: profile?.messagePrivacy ?? poster?.messagePrivacy ?? 'everyone',
+    };
+  };
+
+  const canContactPoster = (poster) => (
+    poster?.id !== mockUser.id &&
+    ((poster?.messagePrivacy ?? 'everyone') === 'everyone' || isFriend(poster.id))
+  );
 
   // Friends first (by distance), then Need/Supply (by distance)
   const sortedForNearby = (pins) => [
@@ -137,13 +164,15 @@ export default function MapScreen({ navigation }) {
     if (p.poster.gender && !genderFilter[p.poster.gender]) return false;
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
     const dist = getDistanceKm(centre.latitude, centre.longitude, p.latitude, p.longitude);
-    if (dist > maxDistance) return false;
+    if (useLocationForMap && dist > maxDistance) return false;
     return true;
   }).map(p => {
     const dist = getDistanceKm(centre.latitude, centre.longitude, p.latitude, p.longitude);
     const isFriendPost = friendIds.includes(p.poster.id);
+    const poster = getPosterWithPrivacy(p.poster);
     return {
       ...p,
+      poster,
       isFriendPost,
       distanceKm: dist,
       distance: dist < 1 ? `${Math.round(dist * 1000)} m` : `${dist.toFixed(1)} km`,
@@ -165,10 +194,10 @@ export default function MapScreen({ navigation }) {
             latitudeDelta: 0.03,
             longitudeDelta: 0.03,
           }}
-          showsUserLocation={true}
+          showsUserLocation={useLocationForMap}
           showsMyLocationButton={false}
         >
-          {userLocation && (
+          {useLocationForMap && userLocation && (
             <Circle
               center={userLocation}
               radius={maxDistance * 1000}
@@ -272,13 +301,25 @@ export default function MapScreen({ navigation }) {
               {/* Radius */}
               <View style={styles.nearbyDistRow}>
                 <Text style={styles.nearbyDistLabel}>Radius</Text>
+                {!useLocationForMap && (
+                  <Text style={styles.nearbyDistDisabledText}>All posts shown</Text>
+                )}
                 {DISTANCE_OPTIONS.map(d => (
                   <TouchableOpacity
                     key={d}
-                    style={[styles.nearbyDistChip, maxDistance === d && { backgroundColor: colors.primary }]}
+                    style={[
+                      styles.nearbyDistChip,
+                      maxDistance === d && useLocationForMap && { backgroundColor: colors.primary },
+                      !useLocationForMap && styles.nearbyDistChipDisabled,
+                    ]}
                     onPress={() => setMaxDistance(d)}
+                    disabled={!useLocationForMap}
                   >
-                    <Text style={[styles.nearbyDistChipText, maxDistance === d && { color: '#fff' }]}>
+                    <Text style={[
+                      styles.nearbyDistChipText,
+                      maxDistance === d && useLocationForMap && { color: '#fff' },
+                      !useLocationForMap && styles.nearbyDistChipTextDisabled,
+                    ]}>
                       {d < 1 ? `${d * 1000}m` : `${d} km`}
                     </Text>
                   </TouchableOpacity>
@@ -468,18 +509,28 @@ export default function MapScreen({ navigation }) {
                   </TouchableOpacity>
                 ) : (
                   <>
-                    <TouchableOpacity
-                      style={styles.tooltipContactBtn}
-                      onPress={() => {
-                        setTooltip(null);
-                        const existingChat = mockChats.find(c => c.user.id === tooltip.poster.id);
-                        navigation.navigate('ChatDetail', {
-                          chat: existingChat ?? { user: { id: tooltip.poster.id, name: tooltip.poster.name, gender: tooltip.poster.gender }, postTitle: tooltip.title },
-                        });
-                      }}
-                    >
-                      <Text style={styles.tooltipContactText}>💬 Contact</Text>
-                    </TouchableOpacity>
+                    {canContactPoster(tooltip.poster) ? (
+                      <TouchableOpacity
+                        style={styles.tooltipContactBtn}
+                        onPress={() => {
+                          setTooltip(null);
+                          const existingChat = mockChats.find(c => c.user.id === tooltip.poster.id);
+                          navigation.navigate('ChatDetail', {
+                            chat: existingChat ?? { user: tooltip.poster, postTitle: tooltip.title },
+                          });
+                        }}
+                      >
+                        <Text style={styles.tooltipContactText}>💬 Contact</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.tooltipContactBtn, styles.tooltipContactBtnLocked]}
+                        disabled
+                      >
+                        <Text style={styles.tooltipContactLockedText}>You're not friends yet</Text>
+                        <Text style={styles.tooltipContactLockedSub}>Add friend first</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                       style={[styles.tooltipFriendBtn, tooltip && isFriend(tooltip.poster.id) && styles.tooltipFriendBtnActive]}
                       onPress={() => {
@@ -531,6 +582,11 @@ export default function MapScreen({ navigation }) {
 
             {/* Distance filter */}
             <Text style={[styles.filterSectionLabel, { marginTop: 8 }]}>SEARCH RADIUS</Text>
+            {!useLocationForMap && (
+              <Text style={styles.filterDisabledHelp}>
+                Radius is disabled while current location is off. All posts are visible on the map.
+              </Text>
+            )}
             <View style={styles.genderChips}>
               {DISTANCE_OPTIONS.map(d => (
                 <TouchableOpacity
@@ -538,11 +594,17 @@ export default function MapScreen({ navigation }) {
                   style={[
                     styles.genderChip,
                     { borderColor: colors.primary },
-                    maxDistance === d && { backgroundColor: colors.primary },
+                    maxDistance === d && useLocationForMap && { backgroundColor: colors.primary },
+                    !useLocationForMap && styles.genderChipDisabled,
                   ]}
                   onPress={() => setMaxDistance(d)}
+                  disabled={!useLocationForMap}
                 >
-                  <Text style={[styles.genderChipText, maxDistance === d && { color: '#fff' }]}>
+                  <Text style={[
+                    styles.genderChipText,
+                    maxDistance === d && useLocationForMap && { color: '#fff' },
+                    !useLocationForMap && styles.genderChipTextDisabled,
+                  ]}>
                     {d < 1 ? `${d * 1000}m` : `${d} km`}
                   </Text>
                 </TouchableOpacity>
@@ -737,6 +799,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
   },
   nearbyDistChipText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
+  nearbyDistDisabledText: { ...typography.caption, color: colors.textMuted, flex: 1 },
+  nearbyDistChipDisabled: { borderColor: colors.border, backgroundColor: colors.background },
+  nearbyDistChipTextDisabled: { color: colors.textMuted },
 
   handleBar: {
     width: 40, height: 4, backgroundColor: colors.border,
@@ -841,6 +906,12 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: colors.primary, borderRadius: 14, padding: 14, alignItems: 'center',
   },
   tooltipContactText: { ...typography.button, color: colors.textWhite },
+  tooltipContactBtnLocked: {
+    backgroundColor: colors.border,
+    paddingVertical: 9,
+  },
+  tooltipContactLockedText: { ...typography.smallBold, color: colors.textSecondary },
+  tooltipContactLockedSub: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
   tooltipBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   friendPostBadge: {
     backgroundColor: PIN_COLOR.friend + '22',
@@ -871,12 +942,15 @@ const styles = StyleSheet.create({
   },
   filterTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: 4 },
   filterSectionLabel: { ...typography.caption, color: colors.textMuted, fontWeight: '700', letterSpacing: 0.8 },
+  filterDisabledHelp: { ...typography.caption, color: colors.textMuted, marginTop: -8, lineHeight: 17 },
   genderChips: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   genderChip: {
     borderWidth: 1.5, borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 8,
   },
   genderChipText: { ...typography.smallBold, color: colors.textPrimary },
+  genderChipDisabled: { borderColor: colors.border, backgroundColor: colors.background },
+  genderChipTextDisabled: { color: colors.textMuted },
   filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   filterRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   filterRowLabel: { ...typography.body, color: colors.textPrimary },

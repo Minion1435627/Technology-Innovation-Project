@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, Alert,
+  ScrollView, Switch, Alert, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +23,11 @@ export default function SettingsScreen({ navigation }) {
   const confirmLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log out', style: 'destructive', onPress: () => todo('Log out') },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: () => navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Login' }] }),
+      },
     ]);
   };
   const confirmDelete = () => {
@@ -86,10 +90,9 @@ export default function SettingsScreen({ navigation }) {
         {/* ---------- Privacy & Safety ---------- */}
         <SectionHeader icon="🔒" title="Privacy & Safety" />
         <Card>
-          <Row icon="chatbubble-outline"     label="Who can message me"      onPress={() => todo('Who can message me')} />
-          <Row icon="location-outline"       label="Show location settings"  onPress={() => todo('Show location settings')} />
-          <Row icon="ban-outline"            label="Blocked users"           onPress={() => todo('Blocked users')} />
-          <Row icon="warning-outline"        label="Report a safety issue"   onPress={() => todo('Report a safety issue')} last />
+          <Row icon="chatbubble-outline"     label="Who can message me"      onPress={() => navigation.navigate('WhoCanMessage')} />
+          <Row icon="location-outline"       label="Show location settings"  onPress={() => navigation.navigate('LocationSettings')} />
+          <Row icon="warning-outline"        label="Report a safety issue"   onPress={() => navigation.navigate('ReportSafetyIssue')} last />
         </Card>
 
         {/* ---------- Notifications ---------- */}
@@ -106,15 +109,15 @@ export default function SettingsScreen({ navigation }) {
         <Card>
           <ToggleRow icon="moon-outline"   label="Dark Mode" value={darkMode} onValueChange={setDarkMode} />
           <Row icon="language-outline"     label="Language"     value="English" onPress={() => todo('Language')} />
-          <Row icon="phone-portrait-outline" label="App Settings" onPress={() => todo('App Settings')} last />
+          <Row icon="phone-portrait-outline" label="App Settings" onPress={() => Linking.openSettings()} last />
         </Card>
 
         {/* ---------- Help & Support ---------- */}
         <SectionHeader icon="❓" title="Help & Support" />
         <Card>
-          <Row icon="help-circle-outline"   label="FAQ"                  onPress={() => todo('FAQ')} />
-          <Row icon="mail-outline"          label="Contact Support"      onPress={() => todo('Contact Support')} />
-          <Row icon="book-outline"          label="Community Guidelines" onPress={() => todo('Community Guidelines')} last />
+          <Row icon="help-circle-outline"   label="FAQ"                  onPress={() => navigation.navigate('FAQ')} />
+          <Row icon="mail-outline"          label="Contact Support"      onPress={() => navigation.navigate('ContactSupport')} />
+          <Row icon="book-outline"          label="Community Guidelines" onPress={() => navigation.navigate('CommunityGuidelines')} last />
         </Card>
 
         {/* ---------- Account Actions ---------- */}

@@ -8,6 +8,7 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { mockOtherUsers, mockUser } from '../data/mockData';
 import { useFriends } from '../context/FriendsContext';
+import { usePrivacy } from '../context/PrivacyContext';
 
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
 const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
@@ -22,8 +23,13 @@ export default function UserProfileScreen({ navigation, route }) {
   const scrollRef = useRef(null);
   const highlightedReviewYRef = useRef(0);
   const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
+  const { messagePrivacy: myPrivacy } = usePrivacy();
   const isMyProfile = userId === mockUser.id;
   const alreadyFriend = !isMyProfile && isFriend(userId);
+  // Can message if: their setting is 'everyone', OR we're already friends
+  const canMessage = !isMyProfile && (
+    (user?.messagePrivacy ?? 'everyone') === 'everyone' || alreadyFriend
+  );
 
   if (!user) {
     return (
@@ -120,12 +126,19 @@ export default function UserProfileScreen({ navigation, route }) {
         {/* Action buttons */}
         {!isMyProfile && (
           <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.msgBtn}
-              onPress={() => navigation.navigate('ChatDetail', { chat: { user, postTitle: 'Direct message' } })}
-            >
-              <Text style={styles.msgBtnText}>💬 Message</Text>
-            </TouchableOpacity>
+            {canMessage ? (
+              <TouchableOpacity
+                style={styles.msgBtn}
+                onPress={() => navigation.navigate('ChatDetail', { chat: { user, postTitle: 'Direct message' } })}
+              >
+                <Text style={styles.msgBtnText}>💬 Message</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.msgBtnLocked}>
+                <Text style={styles.msgBtnLockedText}>🔒 Friends only</Text>
+                <Text style={styles.msgBtnLockedSub}>Add as friend to message</Text>
+              </View>
+            )}
             <TouchableOpacity
               style={[styles.addBtn, alreadyFriend && styles.addBtnActive]}
               onPress={() => alreadyFriend ? removeFriend(userId) : addFriend(userId)}

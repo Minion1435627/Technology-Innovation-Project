@@ -8,6 +8,7 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { Ionicons } from '@expo/vector-icons';
 import { usePosts } from '../context/PostsContext';
+import { usePrivacy } from '../context/PrivacyContext';
 import { mockUser } from '../data/mockData';
 
 const NEED_CATEGORIES = ['Borrow an item', 'Physical help', 'Food sharing', 'Study/skills', 'Custom'];
@@ -31,6 +32,7 @@ const URGENCY_COLOR = {
 
 export default function PostScreen({ navigation, route }) {
   const { addPost } = usePosts();
+  const { locationSettings } = usePrivacy();
   const [postType, setPostType] = useState('need'); // 'need' | 'supply'
   const [form, setForm] = useState({
     title: '',
@@ -61,7 +63,7 @@ export default function PostScreen({ navigation, route }) {
       return;
     }
 
-    const coords = route.params?.userLocation ?? FALLBACK;
+    const coords = locationSettings.useLocationForMap ? (route.params?.userLocation ?? FALLBACK) : FALLBACK;
 
     const newPost = {
       id: `post_${Date.now()}`,

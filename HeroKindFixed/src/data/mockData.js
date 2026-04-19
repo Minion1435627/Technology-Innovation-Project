@@ -50,6 +50,7 @@ export const mockOtherUsers = {
   u1: {
     id: 'u1', name: 'Alex Chen', gender: 'Male', neighbourhood: 'Carlton North', joinDate: 'Jan 2025',
     verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 34,
+    messagePrivacy: 'everyone',
     bio: 'Happy to help neighbours nearby',
     weeklyScore: 185, weeklyRank: 4,
     reviews: [
@@ -62,6 +63,7 @@ export const mockOtherUsers = {
   u2: {
     id: 'u2', name: 'Mia L.', gender: 'Female', neighbourhood: 'Northcote', joinDate: 'Mar 2025',
     verified: true, level: 2, levelName: 'Helper', stars: 4.6, totalReviews: 18, friends: ['u8'],
+    messagePrivacy: 'everyone',
     bio: 'Uni student, love baking and helping neighbours out 🍰',
     weeklyScore: 140, weeklyRank: 6,
     reviews: [
@@ -75,6 +77,7 @@ export const mockOtherUsers = {
   u6: {
     id: 'u6', name: 'David M.', gender: 'Male', neighbourhood: 'Fitzroy', joinDate: 'Nov 2024',
     verified: true, level: 4, levelName: 'Community Pillar', stars: 4.7, totalReviews: 52, friends: ['u8', 'u7'],
+    messagePrivacy: 'everyone',
     bio: 'Handyman & weekend cyclist. Happy to lend tools anytime 🔧',
     weeklyScore: 380, weeklyRank: 1,
     reviews: [
@@ -89,6 +92,7 @@ export const mockOtherUsers = {
   u7: {
     id: 'u7', name: 'Nara P.', gender: 'Female', neighbourhood: 'Brunswick', joinDate: 'Feb 2025',
     verified: false, level: 2, levelName: 'Helper', stars: 4.9, totalReviews: 27, friends: ['u6', 'u9'],
+    messagePrivacy: 'everyone',
     bio: 'Food lover, always cooking too much 🍜 Come eat with me!',
     weeklyScore: 275, weeklyRank: 3,
     reviews: [
@@ -102,6 +106,7 @@ export const mockOtherUsers = {
   u3: {
     id: 'u3', name: 'James W.', gender: 'Male', neighbourhood: 'Richmond', joinDate: 'Dec 2024',
     verified: false, level: 1, levelName: 'Newcomer', stars: 4.9, totalReviews: 8, friends: [],
+    messagePrivacy: 'everyone',
     bio: 'Always moving flats and grateful for neighbours who pitch in. Happy to return the favour!',
     weeklyScore: 95, weeklyRank: 7,
     reviews: [
@@ -114,6 +119,7 @@ export const mockOtherUsers = {
   u4: {
     id: 'u4', name: 'Sophie K.', gender: 'Female', neighbourhood: 'Parkville', joinDate: 'Oct 2024',
     verified: true, level: 4, levelName: 'Community Pillar', stars: 5.0, totalReviews: 41, friends: ['u8'],
+    messagePrivacy: 'friends_only',
     bio: 'Avid cyclist and uni student. Always happy to lend gear to fellow riders and help out nearby.',
     weeklyScore: 162, weeklyRank: 5,
     reviews: [
@@ -127,6 +133,7 @@ export const mockOtherUsers = {
   u5: {
     id: 'u5', name: 'Ryo T.', gender: 'Male', neighbourhood: 'Collingwood', joinDate: 'Jan 2025',
     verified: true, level: 2, levelName: 'Helper', stars: 4.3, totalReviews: 11, friends: [],
+    messagePrivacy: 'friends_only',
     bio: 'CS student who sometimes gets stuck on tricky datasets and loves collaborative problem-solving.',
     weeklyScore: 78, weeklyRank: 8,
     reviews: [
@@ -139,6 +146,7 @@ export const mockOtherUsers = {
   u8: {
     id: 'u8', name: 'Emma R.', gender: 'Female', neighbourhood: 'Carlton', joinDate: 'Sep 2024',
     verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 36, friends: ['u6', 'u2', 'u19', 'u11'],
+    messagePrivacy: 'everyone',
     bio: '3rd year CS student. Happy to help with frontend questions and pair-programming sessions.',
     weeklyScore: 310, weeklyRank: 2,
     reviews: [
@@ -153,6 +161,7 @@ export const mockOtherUsers = {
   u9: {
     id: 'u9', name: 'Lena B.', gender: 'Female', neighbourhood: 'Southbank', joinDate: 'Feb 2025',
     verified: true, level: 2, levelName: 'Helper', stars: 4.7, totalReviews: 15, friends: ['u7', 'u10'],
+    messagePrivacy: 'everyone',
     bio: 'Dog mum and outdoor enthusiast. My pup loves long walks and meeting friendly new people!',
     weeklyScore: 112, weeklyRank: 10,
     reviews: [
@@ -165,6 +174,7 @@ export const mockOtherUsers = {
   u10: {
     id: 'u10', name: 'Omar S.', gender: 'Male', neighbourhood: 'West Melbourne', joinDate: 'Mar 2025',
     verified: false, level: 1, levelName: 'Newcomer', stars: 4.5, totalReviews: 6, friends: ['u9'],
+    messagePrivacy: 'friends_only',
     bio: 'Recently moved apartments and passing on some beloved plants to good homes nearby.',
     weeklyScore: 55, weeklyRank: 13,
     reviews: [
@@ -177,6 +187,7 @@ export const mockOtherUsers = {
   u11: {
     id: 'u11', name: 'Tammy', gender: 'Female', neighbourhood: 'Carlton', joinDate: 'Apr 2025',
     verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 21, friends: ['u14', 'u8'],
+    messagePrivacy: 'everyone',
     bio: 'Frontend student who enjoys helping people untangle React state and UI flow problems.',
     weeklyScore: 210, weeklyRank: 5,
     reviews: [
@@ -189,6 +200,7 @@ export const mockOtherUsers = {
   u12: {
     id: 'u12', name: 'Leo', gender: 'Male', neighbourhood: 'Parkville', joinDate: 'May 2025',
     verified: true, level: 2, levelName: 'Helper', stars: 4.6, totalReviews: 12, friends: ['u20', 'u13'],
+    messagePrivacy: 'everyone',
     bio: 'Usually borrowing tools for quick apartment fixes and always returns them carefully.',
     weeklyScore: 128, weeklyRank: 9,
     reviews: [
@@ -201,6 +213,7 @@ export const mockOtherUsers = {
   u13: {
     id: 'u13', name: 'Minion', gender: 'Male', neighbourhood: 'Fitzroy North', joinDate: 'Mar 2025',
     verified: true, level: 2, levelName: 'Helper', stars: 4.7, totalReviews: 16, friends: ['u12'],
+    messagePrivacy: 'everyone',
     bio: 'Often borrows basic tools for DIY projects and keeps everyone updated during returns.',
     weeklyScore: 142, weeklyRank: 8,
     reviews: [
@@ -213,6 +226,7 @@ export const mockOtherUsers = {
   u14: {
     id: 'u14', name: 'Bella', gender: 'Female', neighbourhood: 'Melbourne CBD', joinDate: 'Jun 2025',
     verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.9, totalReviews: 24, friends: ['u11', 'u19'],
+    messagePrivacy: 'everyone',
     bio: 'Happy to mentor people through UI polish, flows, and frontend debugging sessions.',
     weeklyScore: 240, weeklyRank: 4,
     reviews: [
@@ -225,6 +239,7 @@ export const mockOtherUsers = {
   u15: {
     id: 'u15', name: 'Anita', gender: 'Female', neighbourhood: 'North Melbourne', joinDate: 'Feb 2025',
     verified: true, level: 2, levelName: 'Helper', stars: 4.5, totalReviews: 14, friends: ['u9'],
+    messagePrivacy: 'friends_only',
     bio: 'Usually careful with borrowed items, but sometimes juggles too many projects at once.',
     weeklyScore: 101, weeklyRank: 12,
     reviews: [
@@ -237,6 +252,7 @@ export const mockOtherUsers = {
   u19: {
     id: 'u19', name: 'Ruby', gender: 'Female', neighbourhood: 'Brunswick East', joinDate: 'Apr 2025',
     verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 19, friends: ['u14', 'u8'],
+    messagePrivacy: 'everyone',
     bio: 'Enjoys short study support sessions and always leaves thoughtful feedback after helping.',
     weeklyScore: 198, weeklyRank: 6,
     reviews: [
@@ -249,6 +265,7 @@ export const mockOtherUsers = {
   u20: {
     id: 'u20', name: 'Ethan', gender: 'Male', neighbourhood: 'Docklands', joinDate: 'Jan 2025',
     verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.7, totalReviews: 22, friends: ['u12'],
+    messagePrivacy: 'everyone',
     bio: 'Lends tools often and prefers to resolve issues carefully if something comes back missing.',
     weeklyScore: 205, weeklyRank: 7,
     reviews: [

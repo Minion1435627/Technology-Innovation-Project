@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { PostsProvider } from '../context/PostsContext';
 import { ChatProvider } from '../context/ChatContext';
 import { FriendsProvider } from '../context/FriendsContext';
+import { PrivacyProvider } from '../context/PrivacyContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,12 @@ import LeaderboardScreen from '../screens/LeaderboardScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import TransactionScreen from '../screens/TransactionScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import WhoCanMessageScreen from '../screens/WhoCanMessageScreen';
+import LocationSettingsScreen from '../screens/support/LocationSettingsScreen';
+import ReportSafetyIssueScreen from '../screens/support/ReportSafetyIssueScreen';
+import FAQScreen from '../screens/support/FAQScreen';
+import ContactSupportScreen from '../screens/support/ContactSupportScreen';
+import CommunityGuidelinesScreen from '../screens/support/CommunityGuidelinesScreen';
 
 // Mini-games
 import GamesScreen from '../screens/GamesScreen';
@@ -102,6 +109,12 @@ function MainNavigator() {
       <MainStack.Screen name="UserProfile" component={UserProfileScreen} />
       <MainStack.Screen name="Transaction" component={TransactionScreen} />
       <MainStack.Screen name="Settings" component={SettingsScreen} />
+      <MainStack.Screen name="WhoCanMessage" component={WhoCanMessageScreen} />
+      <MainStack.Screen name="LocationSettings" component={LocationSettingsScreen} />
+      <MainStack.Screen name="ReportSafetyIssue" component={ReportSafetyIssueScreen} />
+      <MainStack.Screen name="FAQ" component={FAQScreen} />
+      <MainStack.Screen name="ContactSupport" component={ContactSupportScreen} />
+      <MainStack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
     </MainStack.Navigator>
   );
 }
@@ -111,6 +124,7 @@ export default function AppNavigator() {
   const isLoggedIn = false;
 
   return (
+    <PrivacyProvider>
     <FriendsProvider>
     <PostsProvider>
     <ChatProvider>
@@ -130,5 +144,6 @@ export default function AppNavigator() {
     </ChatProvider>
     </PostsProvider>
     </FriendsProvider>
+    </PrivacyProvider>
   );
 }
