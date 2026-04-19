@@ -179,11 +179,11 @@ export default function MapScreen({ navigation }) {
           )}
           {visiblePins.map(pin => (
             <Marker
-              key={pin.id}
+              key={`${pin.id}_${pin.isFriendPost}`}
               coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
               anchor={{ x: 0.5, y: 1 }}
               onPress={() => setTooltip(pin)}
-              tracksViewChanges={pin.id.startsWith('post_')}
+              tracksViewChanges={false}
             >
               <PinMarker pin={pin} />
             </Marker>
