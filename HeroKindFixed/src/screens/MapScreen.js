@@ -12,6 +12,7 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import UrgencyBadge from '../components/UrgencyBadge';
 import { usePosts } from '../context/PostsContext';
+import { useFriends } from '../context/FriendsContext';
 import { mockUser, mockChats } from '../data/mockData';
 
 // Distance options in km
@@ -61,7 +62,7 @@ const WARM_MAP_STYLE = [
 
 // Circular marker with colour glow
 function PinMarker({ pin }) {
-  const color = PIN_COLOR[pin.type];
+  const color = pin.isFriendPost ? PIN_COLOR.friend : PIN_COLOR[pin.type];
   return (
     <View style={styles.pinWrapper}>
       {/* Outer glow ring — semi-transparent circle */}
@@ -84,6 +85,7 @@ export default function MapScreen({ navigation }) {
   const insets  = useSafeAreaInsets();
   const mapRef  = useRef(null);
   const { posts, removePost } = usePosts();
+  const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
   const [userLocation, setUserLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [nearbyOpen, setNearbyOpen] = useState(false);
@@ -123,13 +125,15 @@ export default function MapScreen({ navigation }) {
 
   // Friends first (by distance), then Need/Supply (by distance)
   const sortedForNearby = (pins) => [
-    ...pins.filter(p => p.type === 'friend').sort((a, b) => a.distanceKm - b.distanceKm),
-    ...pins.filter(p => p.type !== 'friend').sort((a, b) => a.distanceKm - b.distanceKm),
+    ...pins.filter(p => p.isFriendPost).sort((a, b) => a.distanceKm - b.distanceKm),
+    ...pins.filter(p => !p.isFriendPost).sort((a, b) => a.distanceKm - b.distanceKm),
   ];
 
   const visiblePins = posts.filter(p => {
     if (p.expiresAt && Date.now() > p.expiresAt) return false;
-    if (!filters[p.type]) return false;
+    const isFriendPost = friendIds.includes(p.poster.id);
+    if (isFriendPost && !filters.friend) return false;
+    if (!isFriendPost && !filters[p.type]) return false;
     if (p.poster.gender && !genderFilter[p.poster.gender]) return false;
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
     const dist = getDistanceKm(centre.latitude, centre.longitude, p.latitude, p.longitude);
@@ -137,7 +141,13 @@ export default function MapScreen({ navigation }) {
     return true;
   }).map(p => {
     const dist = getDistanceKm(centre.latitude, centre.longitude, p.latitude, p.longitude);
-    return { ...p, distanceKm: dist, distance: dist < 1 ? `${Math.round(dist * 1000)} m` : `${dist.toFixed(1)} km` };
+    const isFriendPost = friendIds.includes(p.poster.id);
+    return {
+      ...p,
+      isFriendPost,
+      distanceKm: dist,
+      distance: dist < 1 ? `${Math.round(dist * 1000)} m` : `${dist.toFixed(1)} km`,
+    };
   });
 
   return (
@@ -327,24 +337,34 @@ export default function MapScreen({ navigation }) {
                   style={styles.sheetRow}
                   onPress={() => { setNearbyOpen(false); setTooltip(pin); }}
                 >
-                  <View style={[styles.sheetAvatarRing, { borderColor: PIN_COLOR[pin.type] }]}>
-                    <View style={[styles.sheetAvatarCircle, { backgroundColor: PIN_COLOR[pin.type] }]}>
-                      <Text style={styles.sheetAvatarInitial}>{pin.poster.name.charAt(0)}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.sheetInfo}>
-                    <Text style={styles.sheetName}>{pin.poster.name}</Text>
-                    <Text style={styles.sheetCategory} numberOfLines={1}>{pin.title}</Text>
-                    <Text style={styles.sheetCategorySub}>{pin.category}</Text>
-                  </View>
-                  <View style={styles.sheetRight}>
-                    <Text style={styles.sheetDist}>{pin.distance}</Text>
-                    <View style={[styles.sheetTypeBadge, { backgroundColor: PIN_COLOR[pin.type] + '22' }]}>
-                      <Text style={[styles.sheetTypeText, { color: PIN_COLOR[pin.type] }]}>
-                        {pin.type === 'need' ? 'Need' : pin.type === 'supply' ? 'Supply' : 'Friend'}
-                      </Text>
-                    </View>
-                  </View>
+                  {(() => {
+                    const pinColor = pin.isFriendPost ? PIN_COLOR.friend : PIN_COLOR[pin.type];
+                    return (
+                      <>
+                        <View style={[styles.sheetAvatarRing, { borderColor: pinColor }]}>
+                          <View style={[styles.sheetAvatarCircle, { backgroundColor: pinColor }]}>
+                            <Text style={styles.sheetAvatarInitial}>{pin.poster.name.charAt(0)}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.sheetInfo}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.sheetName}>{pin.poster.name}</Text>
+                            {pin.isFriendPost && <Text style={styles.sheetFriendTag}>💙</Text>}
+                          </View>
+                          <Text style={styles.sheetCategory} numberOfLines={1}>{pin.title}</Text>
+                          <Text style={styles.sheetCategorySub}>{pin.category}</Text>
+                        </View>
+                        <View style={styles.sheetRight}>
+                          <Text style={styles.sheetDist}>{pin.distance}</Text>
+                          <View style={[styles.sheetTypeBadge, { backgroundColor: pinColor + '22' }]}>
+                            <Text style={[styles.sheetTypeText, { color: pinColor }]}>
+                              {pin.type === 'need' ? 'Need' : 'Supply'}
+                            </Text>
+                          </View>
+                        </View>
+                      </>
+                    );
+                  })()}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -360,14 +380,22 @@ export default function MapScreen({ navigation }) {
               <View style={styles.tooltipHandle} />
 
               {/* Type badge */}
-              <View style={[styles.tooltipTypePill, { backgroundColor: PIN_COLOR[tooltip.type] + '22' }]}>
-                <View style={[styles.tooltipTypeDot, { backgroundColor: PIN_COLOR[tooltip.type] }]} />
-                <Text style={[styles.tooltipTypePillText, { color: PIN_COLOR[tooltip.type] }]}>
-                  {tooltip.type === 'need' ? '🆘 Need Help' : tooltip.type === 'supply' ? '📦 Offering' : '💙 Friend'}
-                </Text>
-                {tooltip.urgency && (
-                  <View style={styles.urgencyTag}>
-                    <Text style={styles.urgencyTagText}>⚡ {tooltip.urgency}</Text>
+              <View style={styles.tooltipBadgeRow}>
+                <View style={[styles.tooltipTypePill, { backgroundColor: PIN_COLOR[tooltip.type] + '22' }]}>
+                  <View style={[styles.tooltipTypeDot, { backgroundColor: PIN_COLOR[tooltip.type] }]} />
+                  <Text style={[styles.tooltipTypePillText, { color: PIN_COLOR[tooltip.type] }]}>
+                    {tooltip.type === 'need' ? 'Need Help' : 'Offering'}
+                  </Text>
+                  {tooltip.urgency && (
+                    <View style={styles.urgencyTag}>
+                      <Text style={styles.urgencyTagText}>⚡ {tooltip.urgency}</Text>
+                    </View>
+                  )}
+                </View>
+                {tooltip.isFriendPost && (
+                  <View style={styles.friendPostBadge}>
+                    <View style={styles.friendPostDot} />
+                    <Text style={styles.friendPostBadgeText}>Friend</Text>
                   </View>
                 )}
               </View>
@@ -452,8 +480,17 @@ export default function MapScreen({ navigation }) {
                     >
                       <Text style={styles.tooltipContactText}>💬 Contact</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.tooltipFriendBtn}>
-                      <Text style={styles.tooltipFriendText}>+ Add Friend</Text>
+                    <TouchableOpacity
+                      style={[styles.tooltipFriendBtn, tooltip && isFriend(tooltip.poster.id) && styles.tooltipFriendBtnActive]}
+                      onPress={() => {
+                        const pid = tooltip?.poster?.id;
+                        if (!pid) return;
+                        isFriend(pid) ? removeFriend(pid) : addFriend(pid);
+                      }}
+                    >
+                      <Text style={[styles.tooltipFriendText, tooltip && isFriend(tooltip.poster.id) && styles.tooltipFriendTextActive]}>
+                        {tooltip && isFriend(tooltip.poster.id) ? '✓ Friends' : '+ Add Friend'}
+                      </Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -804,11 +841,23 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: colors.primary, borderRadius: 14, padding: 14, alignItems: 'center',
   },
   tooltipContactText: { ...typography.button, color: colors.textWhite },
+  tooltipBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  friendPostBadge: {
+    backgroundColor: PIN_COLOR.friend + '22',
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
+    flexDirection: 'row', alignItems: 'center',
+  },
+  friendPostDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: PIN_COLOR.friend, marginRight: 5 },
+  friendPostBadgeText: { ...typography.caption, color: PIN_COLOR.friend, fontWeight: '700' },
+  sheetFriendTag: { fontSize: 13 },
+
   tooltipFriendBtn: {
     flex: 1, borderWidth: 1.5, borderColor: colors.primary,
     borderRadius: 14, padding: 14, alignItems: 'center',
   },
   tooltipFriendText: { ...typography.button, color: colors.primary },
+  tooltipFriendBtnActive: { backgroundColor: colors.primary },
+  tooltipFriendTextActive: { color: '#fff' },
   tooltipDeleteBtn: {
     flex: 1, backgroundColor: colors.error + '15', borderWidth: 1.5,
     borderColor: colors.error, borderRadius: 14, padding: 14, alignItems: 'center',

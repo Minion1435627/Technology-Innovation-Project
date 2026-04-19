@@ -8,8 +8,9 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import { mockUser, mockReviews, mockTransactions } from '../data/mockData';
+import { mockUser, mockReviews, mockTransactions, mockOtherUsers } from '../data/mockData';
 import { usePosts } from '../context/PostsContext';
+import { useFriends } from '../context/FriendsContext';
 
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
@@ -25,6 +26,7 @@ const ACHIEVEMENTS = [
 export default function ProfileScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('reviews');
   const { posts, removePost } = usePosts();
+  const { friendIds } = useFriends();
   const user = mockUser;
   const xpPercent = (user.xp / user.xpNext) * 100;
 
@@ -95,14 +97,14 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.statLabel}>{user.totalReviews} reviews</Text>
               </View>
               <View style={styles.statDivider} />
+              <TouchableOpacity style={styles.stat} onPress={() => setActiveTab('friends')}>
+                <Text style={styles.statValue}>{friendIds.length}</Text>
+                <Text style={styles.statLabel}>Friends</Text>
+              </TouchableOpacity>
+              <View style={styles.statDivider} />
               <View style={styles.stat}>
                 <Text style={styles.statValue}>#{user.weeklyRank}</Text>
                 <Text style={styles.statLabel}>This week</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{user.weeklyScore}</Text>
-                <Text style={styles.statLabel}>Weekly pts</Text>
               </View>
             </View>
           </View>
@@ -179,6 +181,7 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.tabBar}>
           {[
             { key: 'reviews', label: 'Reviews', icon: 'star',         iconColor: '#FED330' },
+            { key: 'friends', label: 'Friends', icon: 'people',       iconColor: colors.primary },
             { key: 'needs',   label: 'Needs',   icon: 'help-circle',  iconColor: colors.need },
             { key: 'supply',  label: 'Supply',  icon: 'gift',         iconColor: colors.supply },
           ].map(tab => (
@@ -202,6 +205,41 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         {/* Tab content */}
+        {activeTab === 'friends' && (
+          friendIds.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>🤝</Text>
+              <Text style={styles.emptyText}>No friends yet</Text>
+              <Text style={styles.emptySub}>Tap "Add Friend" on someone's profile or map pin to connect.</Text>
+            </View>
+          ) : (
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              {friendIds.map(fid => {
+                const friend = mockOtherUsers[fid];
+                if (!friend) return null;
+                return (
+                  <TouchableOpacity
+                    key={fid}
+                    style={styles.friendCard}
+                    onPress={() => navigation.navigate('ChatDetail', {
+                      chat: { user: { id: friend.id, name: friend.name, gender: friend.gender, stars: friend.stars }, postTitle: 'Direct Message' },
+                    })}
+                  >
+                    <Avatar name={friend.name} size={46} level={friend.level} showBadge={false} />
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>{friend.name}</Text>
+                      <Text style={styles.friendMeta}>📍 {friend.neighbourhood} · ⭐ {friend.stars}</Text>
+                    </View>
+                    <View style={styles.friendChat}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.primary} />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
+        )}
+
         {activeTab === 'reviews' && mockReviews.map(r => (
           <View key={r.id} style={styles.reviewCard}>
             <View style={styles.reviewHeader}>
@@ -460,6 +498,16 @@ const styles = StyleSheet.create({
   statusBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   statusText: { ...typography.caption, fontWeight: '700' },
   deleteBtn: { padding: 6, marginLeft: 4 },
+
+  friendCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: colors.card, borderRadius: 16, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: colors.border,
+  },
+  friendInfo: { flex: 1 },
+  friendName: { ...typography.smallBold, color: colors.textPrimary },
+  friendMeta: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  friendChat: { padding: 4 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
   emptyEmoji: { fontSize: 40, marginBottom: 10 },

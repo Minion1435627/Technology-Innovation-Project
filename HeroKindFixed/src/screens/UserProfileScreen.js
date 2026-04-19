@@ -7,6 +7,7 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { mockOtherUsers, mockUser } from '../data/mockData';
+import { useFriends } from '../context/FriendsContext';
 
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
 const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
@@ -20,6 +21,9 @@ export default function UserProfileScreen({ navigation, route }) {
   const user = userId === mockUser.id ? mockUser : mockOtherUsers[userId];
   const scrollRef = useRef(null);
   const highlightedReviewYRef = useRef(0);
+  const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
+  const isMyProfile = userId === mockUser.id;
+  const alreadyFriend = !isMyProfile && isFriend(userId);
 
   if (!user) {
     return (
@@ -106,23 +110,32 @@ export default function UserProfileScreen({ navigation, route }) {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>#{user.weeklyRank}</Text>
-            <Text style={styles.statLabel}>This week</Text>
+            <Text style={styles.statValue}>
+              {isMyProfile ? friendIds.length : (user.friends?.length ?? 0)}
+            </Text>
+            <Text style={styles.statLabel}>Friends</Text>
           </View>
         </View>
 
         {/* Action buttons */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.msgBtn}
-            onPress={() => navigation.navigate('ChatDetail', { chat: { user, postTitle: 'Direct message' } })}
-          >
-            <Text style={styles.msgBtnText}>💬 Message</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addBtn}>
-            <Text style={styles.addBtnText}>+ Add Friend</Text>
-          </TouchableOpacity>
-        </View>
+        {!isMyProfile && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.msgBtn}
+              onPress={() => navigation.navigate('ChatDetail', { chat: { user, postTitle: 'Direct message' } })}
+            >
+              <Text style={styles.msgBtnText}>💬 Message</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBtn, alreadyFriend && styles.addBtnActive]}
+              onPress={() => alreadyFriend ? removeFriend(userId) : addFriend(userId)}
+            >
+              <Text style={[styles.addBtnText, alreadyFriend && styles.addBtnTextActive]}>
+                {alreadyFriend ? '✓ Friends' : '+ Add Friend'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Posts */}
         {user.posts?.length > 0 && (
@@ -243,7 +256,9 @@ const styles = StyleSheet.create({
     flex: 1, borderWidth: 1.5, borderColor: colors.primary,
     borderRadius: 14, padding: 14, alignItems: 'center',
   },
+  addBtnActive: { backgroundColor: colors.primary },
   addBtnText: { ...typography.button, color: colors.primary },
+  addBtnTextActive: { color: colors.textWhite },
 
   section: { gap: 10 },
   sectionTitle: { ...typography.h4, color: colors.textPrimary },

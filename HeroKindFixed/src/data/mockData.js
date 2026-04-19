@@ -48,7 +48,7 @@ export const mockUser = {
 export const mockOtherUsers = {
   u2: {
     id: 'u2', name: 'Mia L.', gender: 'Female', neighbourhood: 'Northcote', joinDate: 'Mar 2025',
-    verified: true, level: 2, levelName: 'Helper', stars: 4.6, totalReviews: 18,
+    verified: true, level: 2, levelName: 'Helper', stars: 4.6, totalReviews: 18, friends: ['u8'],
     bio: 'Uni student, love baking and helping neighbours out 🍰',
     weeklyScore: 140, weeklyRank: 6,
     reviews: [
@@ -61,7 +61,7 @@ export const mockOtherUsers = {
   },
   u6: {
     id: 'u6', name: 'David M.', gender: 'Male', neighbourhood: 'Fitzroy', joinDate: 'Nov 2024',
-    verified: true, level: 4, levelName: 'Community Pillar', stars: 4.7, totalReviews: 52,
+    verified: true, level: 4, levelName: 'Community Pillar', stars: 4.7, totalReviews: 52, friends: ['u8', 'u7'],
     bio: 'Handyman & weekend cyclist. Happy to lend tools anytime 🔧',
     weeklyScore: 380, weeklyRank: 1,
     reviews: [
@@ -75,7 +75,7 @@ export const mockOtherUsers = {
   },
   u7: {
     id: 'u7', name: 'Nara P.', gender: 'Female', neighbourhood: 'Brunswick', joinDate: 'Feb 2025',
-    verified: false, level: 2, levelName: 'Helper', stars: 4.9, totalReviews: 27,
+    verified: false, level: 2, levelName: 'Helper', stars: 4.9, totalReviews: 27, friends: ['u6', 'u9'],
     bio: 'Food lover, always cooking too much 🍜 Come eat with me!',
     weeklyScore: 275, weeklyRank: 3,
     reviews: [
@@ -88,7 +88,7 @@ export const mockOtherUsers = {
   },
   u3: {
     id: 'u3', name: 'James W.', gender: 'Male', neighbourhood: 'Richmond', joinDate: 'Dec 2024',
-    verified: false, level: 1, levelName: 'Newcomer', stars: 4.9, totalReviews: 8,
+    verified: false, level: 1, levelName: 'Newcomer', stars: 4.9, totalReviews: 8, friends: [],
     bio: 'Always moving flats and grateful for neighbours who pitch in. Happy to return the favour!',
     weeklyScore: 95, weeklyRank: 7,
     reviews: [
@@ -100,7 +100,7 @@ export const mockOtherUsers = {
   },
   u4: {
     id: 'u4', name: 'Sophie K.', gender: 'Female', neighbourhood: 'Parkville', joinDate: 'Oct 2024',
-    verified: true, level: 4, levelName: 'Community Pillar', stars: 5.0, totalReviews: 41,
+    verified: true, level: 4, levelName: 'Community Pillar', stars: 5.0, totalReviews: 41, friends: ['u8'],
     bio: 'Avid cyclist and uni student. Always happy to lend gear to fellow riders and help out nearby.',
     weeklyScore: 162, weeklyRank: 5,
     reviews: [
@@ -113,7 +113,7 @@ export const mockOtherUsers = {
   },
   u5: {
     id: 'u5', name: 'Ryo T.', gender: 'Male', neighbourhood: 'Collingwood', joinDate: 'Jan 2025',
-    verified: true, level: 2, levelName: 'Helper', stars: 4.3, totalReviews: 11,
+    verified: true, level: 2, levelName: 'Helper', stars: 4.3, totalReviews: 11, friends: [],
     bio: 'CS student who sometimes gets stuck on tricky datasets and loves collaborative problem-solving.',
     weeklyScore: 78, weeklyRank: 8,
     reviews: [
@@ -125,7 +125,7 @@ export const mockOtherUsers = {
   },
   u8: {
     id: 'u8', name: 'Emma R.', gender: 'Female', neighbourhood: 'Carlton', joinDate: 'Sep 2024',
-    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 36,
+    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 36, friends: ['u6', 'u2', 'u19', 'u11'],
     bio: '3rd year CS student. Happy to help with frontend questions and pair-programming sessions.',
     weeklyScore: 310, weeklyRank: 2,
     reviews: [
@@ -139,7 +139,7 @@ export const mockOtherUsers = {
   },
   u9: {
     id: 'u9', name: 'Lena B.', gender: 'Female', neighbourhood: 'Southbank', joinDate: 'Feb 2025',
-    verified: true, level: 2, levelName: 'Helper', stars: 4.7, totalReviews: 15,
+    verified: true, level: 2, levelName: 'Helper', stars: 4.7, totalReviews: 15, friends: ['u7', 'u10'],
     bio: 'Dog mum and outdoor enthusiast. My pup loves long walks and meeting friendly new people!',
     weeklyScore: 112, weeklyRank: 10,
     reviews: [
@@ -151,7 +151,7 @@ export const mockOtherUsers = {
   },
   u10: {
     id: 'u10', name: 'Omar S.', gender: 'Male', neighbourhood: 'West Melbourne', joinDate: 'Mar 2025',
-    verified: false, level: 1, levelName: 'Newcomer', stars: 4.5, totalReviews: 6,
+    verified: false, level: 1, levelName: 'Newcomer', stars: 4.5, totalReviews: 6, friends: ['u9'],
     bio: 'Recently moved apartments and passing on some beloved plants to good homes nearby.',
     weeklyScore: 55, weeklyRank: 13,
     reviews: [
@@ -163,7 +163,7 @@ export const mockOtherUsers = {
   },
   u11: {
     id: 'u11', name: 'Tammy', gender: 'Female', neighbourhood: 'Carlton', joinDate: 'Apr 2025',
-    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 21,
+    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 21, friends: ['u14', 'u8'],
     bio: 'Frontend student who enjoys helping people untangle React state and UI flow problems.',
     weeklyScore: 210, weeklyRank: 5,
     reviews: [
@@ -175,7 +175,7 @@ export const mockOtherUsers = {
   },
   u12: {
     id: 'u12', name: 'Leo', gender: 'Male', neighbourhood: 'Parkville', joinDate: 'May 2025',
-    verified: true, level: 2, levelName: 'Helper', stars: 4.6, totalReviews: 12,
+    verified: true, level: 2, levelName: 'Helper', stars: 4.6, totalReviews: 12, friends: ['u20', 'u13'],
     bio: 'Usually borrowing tools for quick apartment fixes and always returns them carefully.',
     weeklyScore: 128, weeklyRank: 9,
     reviews: [
@@ -187,7 +187,7 @@ export const mockOtherUsers = {
   },
   u13: {
     id: 'u13', name: 'Minion', gender: 'Male', neighbourhood: 'Fitzroy North', joinDate: 'Mar 2025',
-    verified: true, level: 2, levelName: 'Helper', stars: 4.7, totalReviews: 16,
+    verified: true, level: 2, levelName: 'Helper', stars: 4.7, totalReviews: 16, friends: ['u12'],
     bio: 'Often borrows basic tools for DIY projects and keeps everyone updated during returns.',
     weeklyScore: 142, weeklyRank: 8,
     reviews: [
@@ -199,7 +199,7 @@ export const mockOtherUsers = {
   },
   u14: {
     id: 'u14', name: 'Bella', gender: 'Female', neighbourhood: 'Melbourne CBD', joinDate: 'Jun 2025',
-    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.9, totalReviews: 24,
+    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.9, totalReviews: 24, friends: ['u11', 'u19'],
     bio: 'Happy to mentor people through UI polish, flows, and frontend debugging sessions.',
     weeklyScore: 240, weeklyRank: 4,
     reviews: [
@@ -211,7 +211,7 @@ export const mockOtherUsers = {
   },
   u15: {
     id: 'u15', name: 'Anita', gender: 'Female', neighbourhood: 'North Melbourne', joinDate: 'Feb 2025',
-    verified: true, level: 2, levelName: 'Helper', stars: 4.5, totalReviews: 14,
+    verified: true, level: 2, levelName: 'Helper', stars: 4.5, totalReviews: 14, friends: ['u9'],
     bio: 'Usually careful with borrowed items, but sometimes juggles too many projects at once.',
     weeklyScore: 101, weeklyRank: 12,
     reviews: [
@@ -223,7 +223,7 @@ export const mockOtherUsers = {
   },
   u19: {
     id: 'u19', name: 'Ruby', gender: 'Female', neighbourhood: 'Brunswick East', joinDate: 'Apr 2025',
-    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 19,
+    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.8, totalReviews: 19, friends: ['u14', 'u8'],
     bio: 'Enjoys short study support sessions and always leaves thoughtful feedback after helping.',
     weeklyScore: 198, weeklyRank: 6,
     reviews: [
@@ -235,7 +235,7 @@ export const mockOtherUsers = {
   },
   u20: {
     id: 'u20', name: 'Ethan', gender: 'Male', neighbourhood: 'Docklands', joinDate: 'Jan 2025',
-    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.7, totalReviews: 22,
+    verified: true, level: 3, levelName: 'Trusted Neighbour', stars: 4.7, totalReviews: 22, friends: ['u12'],
     bio: 'Lends tools often and prefers to resolve issues carefully if something comes back missing.',
     weeklyScore: 205, weeklyRank: 7,
     reviews: [
@@ -286,8 +286,6 @@ export const mockNeeds = [
     distance: '0.2 km',
     timePosted: '5 min ago',
     poster: { id: 'u2', name: 'Mia L.', stars: 4.6, verified: true, level: 2 },
-    lat: -37.8130,
-    lng: 144.9420,
   },
   {
     id: 'n2',
@@ -299,8 +297,6 @@ export const mockNeeds = [
     distance: '0.5 km',
     timePosted: '12 min ago',
     poster: { id: 'u3', name: 'James W.', stars: 4.9, verified: false, level: 1 },
-    lat: -37.8160,
-    lng: 144.9450,
   },
   {
     id: 'n3',
@@ -312,8 +308,6 @@ export const mockNeeds = [
     distance: '0.8 km',
     timePosted: '20 min ago',
     poster: { id: 'u4', name: 'Sophie K.', stars: 5.0, verified: true, level: 4 },
-    lat: -37.8115,
-    lng: 144.9370,
   },
   {
     id: 'n4',
@@ -325,8 +319,6 @@ export const mockNeeds = [
     distance: '1.1 km',
     timePosted: '1 hr ago',
     poster: { id: 'u5', name: 'Ryo T.', stars: 4.3, verified: true, level: 2 },
-    lat: -37.8175,
-    lng: 144.9340,
   },
   {
     id: 'n12',
@@ -338,8 +330,6 @@ export const mockNeeds = [
     distance: '0.5 km',
     timePosted: '6 hrs ago',
     poster: { id: 'u12', name: 'Leo', stars: 4.6, verified: true, level: 2 },
-    lat: -37.8142,
-    lng: 144.9442,
   },
   {
     id: 'n13',
@@ -351,8 +341,6 @@ export const mockNeeds = [
     distance: '0.5 km',
     timePosted: '7 hrs ago',
     poster: { id: 'u13', name: 'Minion', stars: 4.7, verified: true, level: 2 },
-    lat: -37.8168,
-    lng: 144.9362,
   },
   {
     id: 'n15',
@@ -364,8 +352,6 @@ export const mockNeeds = [
     distance: '0.6 km',
     timePosted: '9 hrs ago',
     poster: { id: 'u15', name: 'Anita', stars: 4.5, verified: true, level: 2 },
-    lat: -37.8088,
-    lng: 144.9412,
   },
 ];
 
@@ -380,8 +366,6 @@ export const mockSupplies = [
     distance: '0.3 km',
     timePosted: '15 min ago',
     poster: { id: 'u6', name: 'David M.', stars: 4.7, verified: true, level: 3 },
-    lat: -37.8138,
-    lng: 144.9408,
   },
   {
     id: 's2',
@@ -393,8 +377,6 @@ export const mockSupplies = [
     distance: '0.6 km',
     timePosted: '30 min ago',
     poster: { id: 'u7', name: 'Nara P.', stars: 4.9, verified: false, level: 2 },
-    lat: -37.8155,
-    lng: 144.9385,
   },
   {
     id: 's3',
@@ -406,8 +388,6 @@ export const mockSupplies = [
     distance: '0.9 km',
     timePosted: '45 min ago',
     poster: { id: 'u8', name: 'Emma R.', stars: 4.8, verified: true, level: 3 },
-    lat: -37.8120,
-    lng: 144.9460,
   },
   {
     id: 's11',
@@ -419,8 +399,6 @@ export const mockSupplies = [
     distance: '0.2 km',
     timePosted: '5 hrs ago',
     poster: { id: 'u11', name: 'Tammy', stars: 4.8, verified: true, level: 3 },
-    lat: -37.8145,
-    lng: 144.9378,
   },
   {
     id: 's14',
@@ -432,8 +410,6 @@ export const mockSupplies = [
     distance: '0.6 km',
     timePosted: '8 hrs ago',
     poster: { id: 'u14', name: 'Bella', stars: 4.9, verified: true, level: 3 },
-    lat: -37.8102,
-    lng: 144.9448,
   },
   {
     id: 's19',
@@ -445,8 +421,6 @@ export const mockSupplies = [
     distance: '0.3 km',
     timePosted: '14 hrs ago',
     poster: { id: 'u19', name: 'Ruby', stars: 4.8, verified: true, level: 3 },
-    lat: -37.8172,
-    lng: 144.9418,
   },
   {
     id: 's20',
@@ -458,8 +432,6 @@ export const mockSupplies = [
     distance: '0.5 km',
     timePosted: '15 hrs ago',
     poster: { id: 'u20', name: 'Ethan', stars: 4.7, verified: true, level: 3 },
-    lat: -37.8133,
-    lng: 144.9355,
   },
 ];
 

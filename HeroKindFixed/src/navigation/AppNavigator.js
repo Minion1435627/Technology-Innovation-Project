@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { PostsProvider } from '../context/PostsContext';
 import { ChatProvider } from '../context/ChatContext';
+import { FriendsProvider } from '../context/FriendsContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -108,6 +109,7 @@ export default function AppNavigator() {
   const isLoggedIn = false;
 
   return (
+    <FriendsProvider>
     <PostsProvider>
     <ChatProvider>
       <NavigationContainer>
@@ -125,5 +127,6 @@ export default function AppNavigator() {
       </NavigationContainer>
     </ChatProvider>
     </PostsProvider>
+    </FriendsProvider>
   );
 }
