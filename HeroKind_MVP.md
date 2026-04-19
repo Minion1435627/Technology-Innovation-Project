@@ -86,6 +86,94 @@ User opens app
 
 ---
 
+## Scoring System
+
+### Overview
+HeroKind uses two parallel numbers to measure a user's contribution:
+
+| Field | What it represents |
+|---|---|
+| `xp` | **Lifetime XP** — total points earned across all time. Drives level-ups and never resets. |
+| `weeklyScore` | **Weekly helpfulness score** — resets every Monday. Drives the leaderboard ranking. |
+
+Both numbers increase together whenever a scoring event occurs.
+
+---
+
+### Score Events
+
+#### Exchange completed (main source of points)
+
+| Role | Exchange type | XP earned | Weekly score earned |
+|---|---|---|---|
+| Provider (giver) | Lend an item | +40 | +40 |
+| Provider (giver) | Share food | +30 | +30 |
+| Provider (giver) | Offer skills / service | +50 | +50 |
+| Provider (giver) | Physical help | +50 | +50 |
+| Requester (receiver) | Any type | +10 | +10 |
+
+> **Why providers earn more:** The app rewards giving. Requesters still earn a small amount to encourage participation and fair reviews.
+
+---
+
+#### Review bonus (awarded when a review is submitted)
+
+| Review score received | Bonus XP | Bonus weekly score |
+|---|---|---|
+| 5 stars | +15 | +15 |
+| 4 stars | +8 | +8 |
+| 3 stars | +3 | +3 |
+| 1–2 stars | 0 | 0 |
+
+---
+
+#### Penalties
+
+| Event | XP change | Weekly score change |
+|---|---|---|
+| Exchange goes overdue (as requester) | 0 | −10 |
+| Dispute raised against you (found at fault) | −10 | −20 |
+
+> XP is never deducted below 0. Weekly score can go negative.
+
+---
+
+### Level Thresholds
+
+Level is derived from **total lifetime XP** (not weekly score).
+
+| Level | Name | XP required |
+|---|---|---|
+| 1 | Newcomer | 0 |
+| 2 | Helper | 200 |
+| 3 | Trusted Neighbour | 500 |
+| 4 | Community Pillar | 1 000 |
+| 5 | Local Hero | 2 000 |
+
+The XP bar on the profile shows progress from the current level threshold to the next.
+
+---
+
+### Weekly Reset
+
+- `weeklyScore` resets to `0` every Monday at midnight (server-side in production).
+- `weeklyRank` is recalculated from the new scores after reset.
+- `xp` and `level` are **never reset** — they are permanent lifetime records.
+
+---
+
+### Example calculation
+
+Alex (provider) lends a drill to Leo (requester). Leo returns it on time and leaves a 5-star review.
+
+| Event | Alex (provider) | Leo (requester) |
+|---|---|---|
+| Exchange completed | +40 XP, +40 weekly | +10 XP, +10 weekly |
+| 5-star review received | +15 XP, +15 weekly | — |
+| **Total** | **+55 XP, +55 weekly** | **+10 XP, +10 weekly** |
+
+---
+
 ## Current State
 
 The app is a **UI prototype with mock data** — no live backend. All users, posts, chats, and transactions come from `mockData.js`. The full screen flows and interactions are functional on iOS Simulator.
