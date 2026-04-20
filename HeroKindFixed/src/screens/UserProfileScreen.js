@@ -111,7 +111,7 @@ export default function UserProfileScreen({ navigation, route }) {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{user.totalReviews}</Text>
+            <Text style={styles.statValue}>{user.reviews?.length ?? 0}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
           <View style={styles.statDivider} />
@@ -141,7 +141,7 @@ export default function UserProfileScreen({ navigation, route }) {
             )}
             <TouchableOpacity
               style={[styles.addBtn, alreadyFriend && styles.addBtnActive]}
-              onPress={() => alreadyFriend ? removeFriend(userId) : addFriend(userId)}
+              onPress={() => alreadyFriend ? removeFriend(userId) : addFriend(userId, user)}
             >
               <Text style={[styles.addBtnText, alreadyFriend && styles.addBtnTextActive]}>
                 {alreadyFriend ? '✓ Friends' : '+ Add Friend'}

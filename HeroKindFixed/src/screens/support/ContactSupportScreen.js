@@ -125,7 +125,7 @@ export default function ContactSupportScreen({ navigation }) {
           <View style={styles.notice}>
             <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
             <Text style={styles.noticeText}>
-              Your report is sent to the HeroKind team only. We never share your details with other users.
+              Your report is sent to the HelpMate team only. We never share your details with other users.
             </Text>
           </View>
 

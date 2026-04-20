@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Alert,
@@ -8,9 +8,12 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import { mockUser, mockReviews, mockTransactions, mockOtherUsers } from '../data/mockData';
+import { mockUser } from '../data/mockData';
+import { fetchUserReviews, fetchTransactions } from '../lib/db';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
+import { useChats } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
 
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
@@ -51,18 +54,46 @@ function formatDue(tx) {
 
 export default function ProfileScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('reviews');
+  const [reviews, setReviews] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const { posts, removePost } = usePosts();
-  const { friendIds } = useFriends();
-  const user = mockUser;
-  const xpPercent = Math.min(100, (user.xp / user.xpNext) * 100);
+  const { friends } = useFriends();
+  const { chats } = useChats();
+  const { profile, user: authUser } = useAuth();
+  const user = profile ?? (__DEV__ ? mockUser : null);
 
-  const myNeeds    = posts.filter(p => p.poster.id === user.id && p.type === 'need');
-  const mySupplies = posts.filter(p => p.poster.id === user.id && p.type === 'supply');
-  const activeExchanges    = mockTransactions.filter(t => t.status !== 'completed');
-  const completedExchanges = mockTransactions.filter(t => t.status === 'completed');
+  useEffect(() => {
+    if (!authUser?.id) return;
+    fetchUserReviews(authUser.id).then(rows => {
+      setReviews(rows.map(r => ({
+        id: r.id,
+        reviewer: r.reviewer?.name ?? 'Anonymous',
+        stars: r.stars,
+        date: new Date(r.created_at).toLocaleDateString(),
+        comment: r.comment ?? '',
+        tags: (r.review_selected_tags ?? []).map(t => t.review_tags?.label).filter(Boolean),
+      })));
+    });
+    fetchTransactions(authUser.id).then(rows => {
+      setTransactions(rows.map(t => ({
+        ...t,
+        item: t.title ?? t.item ?? '',
+        agreedReturnDate: t.agreed_return_date ?? t.agreedReturnDate,
+        myRole: t.provider_id === authUser.id ? 'provider' : 'requester',
+      })));
+    });
+  }, [authUser?.id]);
+
+  const xpPercent   = user ? Math.min(100, (user.xp / (user.xp_next ?? 200)) * 100) : 0;
+  const myNeeds     = user ? posts.filter(p => p.poster.id === user.id && p.type === 'need') : [];
+  const mySupplies  = user ? posts.filter(p => p.poster.id === user.id && p.type === 'supply') : [];
+  const activeExchanges    = transactions.filter(t => t.status !== 'completed');
+  const completedExchanges = transactions.filter(t => t.status === 'completed');
 
   const scrollRef    = useRef(null);
   const tabSectionY  = useRef(0);
+
+  if (!user) return null;
 
   const scrollTo = (y) => scrollRef.current?.scrollTo({ y, animated: true });
 
@@ -85,8 +116,9 @@ export default function ProfileScreen({ navigation }) {
       onPress: () => Alert.alert('History', `${completedExchanges.length} completed exchange${completedExchanges.length === 1 ? '' : 's'} so far.`) },
   ];
 
-  const xpRemaining = Math.max(0, user.xpNext - user.xp);
-  const xpHint      = `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${user.level + 1}`;
+  const xpNext      = user.xp_next ?? 200;
+  const xpRemaining = Math.max(0, xpNext - user.xp);
+  const xpHint      = `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${(user.level ?? 1) + 1}`;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -130,7 +162,7 @@ export default function ProfileScreen({ navigation }) {
                 )}
               </View>
               <Text style={styles.userMeta} numberOfLines={1}>
-                {user.neighbourhood} · Joined {user.joinDate}
+                {user.neighbourhood} · Joined {user.join_date ?? ''}
               </Text>
               {!!user.bio && (
                 <Text style={styles.userBio} numberOfLines={2}>“{user.bio}”</Text>
@@ -166,13 +198,13 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
             <Text style={styles.statEmoji}>🧾</Text>
-            <Text style={styles.statValue}>{user.totalReviews}</Text>
+            <Text style={styles.statValue}>{reviews.length}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
             <Text style={styles.statEmoji}>🏆</Text>
-            <Text style={styles.statValue}>#{user.weeklyRank}</Text>
+            <Text style={styles.statValue}>#{user.weekly_rank ?? '-'}</Text>
             <Text style={styles.statLabel}>This week</Text>
           </View>
         </View>
@@ -186,7 +218,7 @@ export default function ProfileScreen({ navigation }) {
                 Level {user.level} — {LEVEL_NAMES[user.level - 1]}
               </Text>
               <Text style={styles.levelXP}>
-                {user.xp} / {user.xpNext} XP
+                {user.xp} / {user.xp_next ?? 200} XP
               </Text>
             </View>
             <Text style={styles.levelPercent}>{Math.round(xpPercent)}%</Text>
@@ -286,6 +318,7 @@ export default function ProfileScreen({ navigation }) {
             { key: 'reviews', label: 'Reviews', icon: 'star',        iconColor: '#FED330' },
             { key: 'needs',   label: 'Needs',   icon: 'help-circle', iconColor: colors.need },
             { key: 'supply',  label: 'Supply',  icon: 'gift',        iconColor: colors.supply },
+            { key: 'friends', label: 'Friends', icon: 'people',      iconColor: colors.primary },
           ].map(tab => (
             <TouchableOpacity
               key={tab.key}
@@ -307,7 +340,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         {/* ---------- Tab content ---------- */}
-        {activeTab === 'reviews' && mockReviews.map(r => (
+        {activeTab === 'reviews' && reviews.map(r => (
           <View key={r.id} style={styles.reviewCard}>
             <View style={styles.reviewHeader}>
               <Avatar name={r.reviewer} size={36} level={2} showBadge={false} />
@@ -379,6 +412,42 @@ export default function ProfileScreen({ navigation }) {
             </View>
           ))
         )}
+
+        {activeTab === 'friends' && (() => {
+          const sortedFriends = [...friends].sort((a, b) =>
+            (a.name ?? '').localeCompare(b.name ?? '')
+          );
+          return sortedFriends.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people" size={64} color={colors.primary} style={{ marginBottom: 10 }} />
+              <Text style={styles.emptyText}>No friends yet</Text>
+              <Text style={styles.emptySub}>Find people on the map and add them as friends.</Text>
+            </View>
+          ) : sortedFriends.map(friend => (
+            <TouchableOpacity
+              key={friend.id}
+              style={[styles.friendCard, { marginHorizontal: 16, marginVertical: 4 }]}
+              onPress={() => navigation.navigate('UserProfile', { userId: friend.id })}
+            >
+              <Avatar name={friend.name} size={44} level={friend.level} showBadge />
+              <View style={styles.friendInfo}>
+                <Text style={styles.friendName}>{friend.name}</Text>
+                <Text style={styles.friendMeta}>{friend.neighbourhood} · ⭐ {friend.stars}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.friendChat}
+                onPress={() => {
+                  const existing = chats.find(c => c.user?.id === friend.id);
+                  navigation.navigate('ChatDetail', {
+                    chat: existing ?? { user: friend, postTitle: 'Direct message' },
+                  });
+                }}
+              >
+                <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ));
+        })()}
 
       </ScrollView>
     </SafeAreaView>

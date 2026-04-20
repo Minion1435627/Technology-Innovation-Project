@@ -8,8 +8,9 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import { CHAT_MESSAGE_SCENARIOS } from '../data/mockData';
 import { useChats } from '../context/ChatContext';
+import { fetchMessages, sendMessage as dbSendMessage } from '../lib/db';
+import { useAuth } from '../context/AuthContext';
 
 const ATTACHMENT_PROOF_OPTIONS = [
   { id: 'general', label: 'General photo' },
@@ -443,6 +444,7 @@ const EXCHANGE_STATUS_CONFIG = {
 
 export default function ChatScreen({ navigation, route }) {
   const { addChat, updateLastMessage } = useChats();
+  const { user } = useAuth();
   const [input, setInput] = useState('');
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [startExchangeOpen, setStartExchangeOpen] = useState(false);
@@ -469,11 +471,6 @@ export default function ChatScreen({ navigation, route }) {
   const otherUserId = chat?.user?.id ?? 'u6';
   const otherUserName = chat?.user?.name ?? 'David M.';
   const otherUserGender = chat?.user?.gender;
-  const initialMessages = useMemo(() => {
-    if (chat?.id && CHAT_MESSAGE_SCENARIOS[chat.id]) return CHAT_MESSAGE_SCENARIOS[chat.id];
-    return [];
-  }, [chat?.id]);
-
   // Register a brand-new chat in the list when opening from the map
   useEffect(() => {
     if (!chat?.id) {
@@ -496,8 +493,25 @@ export default function ChatScreen({ navigation, route }) {
       typeLabel: 'Post',
       description: 'Open the original post for the full task details.',
     };
-  const [messages, setMessages] = useState(initialMessages);
-  const [exchange, setExchange] = useState(chat?.id ? EXCHANGE_META[chat.id] ?? null : null);
+  const [messages, setMessages] = useState([]);
+
+  // Load messages from DB when opening a real chat
+  const isDbChatId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+  useEffect(() => {
+    if (!chat?.id || !isDbChatId(chat.id)) return;
+    fetchMessages(chat.id).then(rows => {
+      const mapped = rows.map(m => ({
+        id: m.id,
+        sender: m.sender_id === user?.id ? 'me' : 'them',
+        text: m.text,
+        time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        read: true,
+      }));
+      setMessages(mapped);
+    });
+  }, [chat?.id, user?.id]);
+  const [exchange, setExchange] = useState(chat?.exchange ?? (chat?.id ? EXCHANGE_META[chat.id] ?? null : null));
   const [showScrollUpBtn, setShowScrollUpBtn] = useState(false);
   const [showScrollDownBtn, setShowScrollDownBtn] = useState(false);
   const listRef = useRef(null);
@@ -934,17 +948,19 @@ export default function ChatScreen({ navigation, route }) {
 
   const send = () => {
     if (!input.trim()) return;
+    const text = input.trim();
     const newMsg = {
       id: `m${Date.now()}`,
       sender: 'me',
-      text: input.trim(),
+      text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       read: false,
     };
     setMessages(prev => [...prev, newMsg]);
-    updateLastMessage(effectiveChatId, newMsg.text, newMsg.time);
+    updateLastMessage(effectiveChatId, text, newMsg.time);
     setInput('');
     setTimeout(() => scrollToLatest(true), 30);
+    if (user?.id && isDbChatId(effectiveChatId)) dbSendMessage(effectiveChatId, user.id, text);
   };
 
   useEffect(() => {

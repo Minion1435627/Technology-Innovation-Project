@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, KeyboardAvoidingView, Platform, ScrollView,
+  StyleSheet, Dimensions, KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { typography } from '../../theme/typography';
+import { supabase } from '../../lib/supabase';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const { width } = Dimensions.get('window');
 
@@ -199,6 +204,40 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw]     = useState(false);
+  const [loading, setLoading]   = useState(false);
+
+  const handleGoogleLogin = async () => {
+    const redirectUrl = AuthSession.makeRedirectUri({ scheme: 'helpmate' });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: redirectUrl },
+    });
+    if (error) { Alert.alert('Google login failed', error.message); return; }
+    if (data?.url) {
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      if (result.type === 'success') {
+        const url = new URL(result.url);
+        const accessToken = url.searchParams.get('access_token');
+        const refreshToken = url.searchParams.get('refresh_token');
+        if (accessToken) {
+          await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          navigation.replace('Main');
+        }
+      }
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert('Missing info', 'Please enter your email and password.');
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) { Alert.alert('Login failed', error.message); return; }
+    navigation.replace('Main');
+  };
 
   return (
     <View style={styles.safe}>
@@ -255,11 +294,33 @@ export default function LoginScreen({ navigation }) {
 
             <TouchableOpacity
               style={styles.loginBtn}
-              onPress={() => navigation.replace('Main')}
+              onPress={handleLogin}
               activeOpacity={0.85}
+              disabled={loading}
             >
-              <Text style={styles.loginBtnText}>Login</Text>
+              {loading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.loginBtnText}>Login</Text>
+              }
             </TouchableOpacity>
+
+            {__DEV__ && (
+              <TouchableOpacity
+                style={styles.devBtn}
+                onPress={async () => {
+                  setLoading(true);
+                  const { error } = await supabase.auth.signInWithPassword({
+                    email: 'dev@helpmate.com',
+                    password: 'DevHelpMate2025',
+                  });
+                  setLoading(false);
+                  if (error) { Alert.alert('Dev login failed', error.message); return; }
+                  navigation.replace('Main');
+                }}
+              >
+                <Text style={styles.devBtnText}>⚡ Dev: Login as Alex Chen</Text>
+              </TouchableOpacity>
+            )}
 
             <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
@@ -267,7 +328,7 @@ export default function LoginScreen({ navigation }) {
               <View style={styles.dividerLine} />
             </View>
 
-            <TouchableOpacity style={styles.socialBtn}>
+            <TouchableOpacity style={styles.socialBtn} onPress={handleGoogleLogin}>
               <Text style={styles.googleG}>G</Text>
               <Text style={styles.socialBtnText}>Continue with Google</Text>
             </TouchableOpacity>
@@ -343,6 +404,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28, shadowRadius: 10, elevation: 5,
   },
   loginBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+
+  devBtn: {
+    marginTop: 12, alignItems: 'center', paddingVertical: 10,
+    borderRadius: 12, borderWidth: 1.5, borderColor: '#f59f00',
+    borderStyle: 'dashed', backgroundColor: '#fffbeb',
+  },
+  devBtnText: { ...typography.smallBold, color: '#f59f00' },
 
   dividerRow: {
     flexDirection: 'row', alignItems: 'center',

@@ -1,0 +1,176 @@
+import { supabase } from './supabase';
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+export async function fetchUserProfile(userId) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  if (error) console.warn('fetchUserProfile:', error.message);
+  return data;
+}
+
+export async function updateUserProfile(userId, fields) {
+  const { error } = await supabase
+    .from('users')
+    .update(fields)
+    .eq('id', userId);
+  if (error) console.error('updateUserProfile:', error.message);
+  return !error;
+}
+
+// ─── Posts ────────────────────────────────────────────────────────────────────
+
+export async function fetchNearbyPosts() {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`*, users(id, name, stars, level, verified, gender)`)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+  if (error) console.error('fetchNearbyPosts:', error.message);
+  return data ?? [];
+}
+
+export async function createPost(post) {
+  const { data, error } = await supabase
+    .from('posts')
+    .insert(post)
+    .select()
+    .single();
+  if (error) console.error('createPost:', error.message);
+  return data;
+}
+
+export async function deletePost(postId) {
+  const { error } = await supabase
+    .from('posts')
+    .delete()
+    .eq('id', postId);
+  if (error) console.warn('deletePost:', error.message);
+  return !error;
+}
+
+// ─── Friendships ──────────────────────────────────────────────────────────────
+
+export async function fetchFriends(userId) {
+  const { data, error } = await supabase
+    .from('friendships')
+    .select(`*, friend:friend_id(id, name, stars, level, neighbourhood)`)
+    .eq('user_id', userId)
+    .eq('status', 'accepted');
+  if (error) console.error('fetchFriends:', error.message);
+  return data ?? [];
+}
+
+export async function addFriend(userId, friendId) {
+  const { error } = await supabase
+    .from('friendships')
+    .insert({ user_id: userId, friend_id: friendId, status: 'accepted' });
+  if (error) console.error('addFriend:', error.message);
+  return !error;
+}
+
+export async function removeFriend(userId, friendId) {
+  const { error } = await supabase
+    .from('friendships')
+    .delete()
+    .eq('user_id', userId)
+    .eq('friend_id', friendId);
+  if (error) console.error('removeFriend:', error.message);
+  return !error;
+}
+
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+
+export async function fetchUserReviews(userId) {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select(`*, reviewer:reviewer_id(name), review_selected_tags(tag_id, review_tags(label))`)
+    .eq('reviewee_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) console.error('fetchUserReviews:', error.message);
+  return data ?? [];
+}
+
+// ─── Chats ────────────────────────────────────────────────────────────────────
+
+export async function fetchChats(userId) {
+  const { data, error } = await supabase
+    .from('chats')
+    .select(`*, user1:user1_id(id, name, stars, gender), user2:user2_id(id, name, stars, gender)`)
+    .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+    .order('last_message_at', { ascending: false });
+  if (error) console.error('fetchChats:', error.message);
+  return data ?? [];
+}
+
+export async function fetchTransactionByChat(chatId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, status, type, title, provider_id, requester_id, agreed_return_date')
+    .eq('chat_id', chatId)
+    .limit(1)
+    .maybeSingle();
+  if (error) console.warn('fetchTransactionByChat:', error.message);
+  return data ?? null;
+}
+
+export async function fetchMessages(chatId) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('chat_id', chatId)
+    .order('created_at', { ascending: true });
+  if (error) console.error('fetchMessages:', error.message);
+  return data ?? [];
+}
+
+export async function sendMessage(chatId, senderId, text) {
+  const { error: msgError } = await supabase
+    .from('messages')
+    .insert({ chat_id: chatId, sender_id: senderId, text });
+
+  // Update last_message preview on the chat
+  await supabase
+    .from('chats')
+    .update({ last_message: text, last_message_at: new Date().toISOString() })
+    .eq('id', chatId);
+
+  if (msgError) console.error('sendMessage:', msgError.message);
+  return !msgError;
+}
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+export async function fetchLeaderboard() {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, level, stars, weekly_score, neighbourhood')
+    .order('weekly_score', { ascending: false })
+    .limit(20);
+  if (error) console.warn('fetchLeaderboard:', error.message);
+  return data ?? [];
+}
+
+export async function fetchTransactions(userId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select(`*, provider:provider_id(id, name, stars, level), requester:requester_id(id, name, stars, level)`)
+    .or(`provider_id.eq.${userId},requester_id.eq.${userId}`)
+    .order('created_at', { ascending: false });
+  if (error) console.error('fetchTransactions:', error.message);
+  return data ?? [];
+}
+
+export async function updateTransactionStatus(transactionId, status) {
+  const fields = { status };
+  if (status === 'completed') fields.completed_date = new Date().toISOString();
+  const { error } = await supabase
+    .from('transactions')
+    .update(fields)
+    .eq('id', transactionId);
+  if (error) console.error('updateTransactionStatus:', error.message);
+  return !error;
+}

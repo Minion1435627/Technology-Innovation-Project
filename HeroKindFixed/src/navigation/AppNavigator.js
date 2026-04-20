@@ -5,6 +5,7 @@ import { PostsProvider } from '../context/PostsContext';
 import { ChatProvider } from '../context/ChatContext';
 import { FriendsProvider } from '../context/FriendsContext';
 import { PrivacyProvider } from '../context/PrivacyContext';
+import { AuthProvider } from '../context/AuthContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -124,6 +125,7 @@ export default function AppNavigator() {
   const isLoggedIn = false;
 
   return (
+    <AuthProvider>
     <PrivacyProvider>
     <FriendsProvider>
     <PostsProvider>
@@ -145,5 +147,6 @@ export default function AppNavigator() {
     </PostsProvider>
     </FriendsProvider>
     </PrivacyProvider>
+    </AuthProvider>
   );
 }

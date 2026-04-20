@@ -536,7 +536,7 @@ export default function MapScreen({ navigation }) {
                       onPress={() => {
                         const pid = tooltip?.poster?.id;
                         if (!pid) return;
-                        isFriend(pid) ? removeFriend(pid) : addFriend(pid);
+                        isFriend(pid) ? removeFriend(pid) : addFriend(pid, tooltip?.poster);
                       }}
                     >
                       <Text style={[styles.tooltipFriendText, tooltip && isFriend(tooltip.poster.id) && styles.tooltipFriendTextActive]}>

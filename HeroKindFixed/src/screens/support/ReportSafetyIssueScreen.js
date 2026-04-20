@@ -27,7 +27,7 @@ export default function ReportSafetyIssueScreen({ navigation }) {
   const handleSubmit = () => {
     Alert.alert(
       'Submit safety report?',
-      'HeroKind will review this report and may contact you for more details.',
+      'HelpMate will review this report and may contact you for more details.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Submit', onPress: () => setSubmitted(true) },
@@ -51,7 +51,7 @@ export default function ReportSafetyIssueScreen({ navigation }) {
           </View>
           <Text style={styles.successTitle}>Report submitted</Text>
           <Text style={styles.successBody}>
-            Thanks for telling us. The HeroKind team will review this and follow up if more information is needed.
+            Thanks for telling us. The HelpMate team will review this and follow up if more information is needed.
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.doneBtnText}>Back to Settings</Text>
@@ -84,7 +84,7 @@ export default function ReportSafetyIssueScreen({ navigation }) {
           </View>
 
           <Text style={styles.intro}>
-            Tell us what happened. Reports are private and help keep the HeroKind community safe.
+            Tell us what happened. Reports are private and help keep the HelpMate community safe.
           </Text>
 
           <Text style={styles.label}>What happened?</Text>

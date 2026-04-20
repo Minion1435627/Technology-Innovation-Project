@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
    ScrollView, FlatList,
@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { mockLeaderboard, mockUser } from '../data/mockData';
+import { fetchLeaderboard } from '../lib/db';
+import { useAuth } from '../context/AuthContext';
 
 const PODIUM_COLORS = ['#FED330', '#BDC3C7', '#E67E22']; // Gold, Silver, Bronze
 const PODIUM_EMOJIS = ['🥇', '🥈', '🥉'];
@@ -15,8 +16,21 @@ const PODIUM_HEIGHTS = [120, 88, 72];
 const PODIUM_ORDER = [1, 0, 2]; // display order: 2nd, 1st, 3rd
 
 export default function LeaderboardScreen({ navigation }) {
-  const top3 = mockLeaderboard.slice(0, 3);
-  const rest = mockLeaderboard.slice(3);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const { user: authUser } = useAuth();
+
+  useEffect(() => {
+    fetchLeaderboard().then(rows => {
+      setLeaderboard(rows.map((r, i) => ({
+        ...r,
+        rank: i + 1,
+        score: r.weekly_score ?? 0,
+      })));
+    });
+  }, []);
+
+  const top3 = leaderboard.slice(0, 3);
+  const rest = leaderboard.slice(3);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -44,7 +58,7 @@ export default function LeaderboardScreen({ navigation }) {
           <Text style={styles.podiumTitle}>Top Helpers This Week</Text>
 
           <View style={styles.podiumStage}>
-            {PODIUM_ORDER.map(idx => {
+            {top3.length < 3 ? null : PODIUM_ORDER.map(idx => {
               const user = top3[idx];
               const podiumHeight = PODIUM_HEIGHTS[idx === 0 ? 0 : idx === 1 ? 1 : 2];
               return (
@@ -75,16 +89,22 @@ export default function LeaderboardScreen({ navigation }) {
         </View>
 
         {/* My rank highlight */}
-        <View style={styles.myRankBanner}>
-          <Text style={styles.myRankLabel}>Your rank</Text>
-          <Text style={styles.myRankValue}>#{mockUser.weeklyRank}</Text>
-          <Text style={styles.myRankScore}>{mockUser.weeklyScore} pts this week</Text>
-          <View style={styles.myRankTip}>
-            <Text style={styles.myRankTipText}>
-              Help 2 more neighbours to reach #{mockUser.weeklyRank - 1}!
-            </Text>
-          </View>
-        </View>
+        {(() => {
+          const myEntry = leaderboard.find(r => r.id === authUser?.id);
+          if (!myEntry) return null;
+          return (
+            <View style={styles.myRankBanner}>
+              <Text style={styles.myRankLabel}>Your rank</Text>
+              <Text style={styles.myRankValue}>#{myEntry.rank}</Text>
+              <Text style={styles.myRankScore}>{myEntry.score} pts this week</Text>
+              <View style={styles.myRankTip}>
+                <Text style={styles.myRankTipText}>
+                  Help more neighbours to climb the leaderboard!
+                </Text>
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Full leaderboard */}
         <View style={styles.fullList}>
@@ -92,19 +112,19 @@ export default function LeaderboardScreen({ navigation }) {
 
           {/* Top 3 in list */}
           {top3.map(user => (
-            <LeaderboardRow key={user.rank} user={user} isMe={user.id === 'u1'} isTop3 />
+            <LeaderboardRow key={user.rank} user={user} isMe={user.id === authUser?.id} isTop3 />
           ))}
 
           {/* Divider */}
           <View style={styles.listDivider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerLabel}>Ranks 4–{mockLeaderboard.length}</Text>
+            <Text style={styles.dividerLabel}>Ranks 4–{leaderboard.length}</Text>
             <View style={styles.dividerLine} />
           </View>
 
           {/* Rest */}
           {rest.map(user => (
-            <LeaderboardRow key={user.rank} user={user} isMe={user.id === 'u1'} />
+            <LeaderboardRow key={user.rank} user={user} isMe={user.id === authUser?.id} />
           ))}
         </View>
 
