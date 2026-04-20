@@ -11,7 +11,6 @@ import * as Location from 'expo-location';
 import { usePosts } from '../context/PostsContext';
 import { usePrivacy } from '../context/PrivacyContext';
 import { useAuth } from '../context/AuthContext';
-import { mockUser } from '../data/mockData';
 
 const NEED_CATEGORIES = ['Borrow an item', 'Physical help', 'Food sharing', 'Study/skills', 'Custom'];
 const SUPPLY_CATEGORIES = ['Lend an item', 'Physical help', 'Share food', 'Offer skills', 'Custom'];
@@ -36,7 +35,7 @@ export default function PostScreen({ navigation, route }) {
   const { addPost } = usePosts();
   const { locationSettings } = usePrivacy();
   const { profile } = useAuth();
-  const currentUser = profile ?? (__DEV__ ? mockUser : null);
+  const currentUser = profile;
   const [gpsCoords, setGpsCoords] = useState(route.params?.userLocation ?? null);
 
   useEffect(() => {

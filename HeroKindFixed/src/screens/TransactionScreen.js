@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { addReviewToUserProfile, mockUser } from '../data/mockData';
+import { submitReview as dbSubmitReview } from '../lib/db';
+import { useAuth } from '../context/AuthContext';
 
 const REVIEW_TAG_OPTIONS = ['Friendly', 'On time', 'Clear communication', 'Reliable', 'Helpful'];
 
@@ -75,6 +76,7 @@ function Countdown({ targetDate }) {
 }
 
 export default function TransactionScreen({ navigation, route }) {
+  const { user: authUser, profile } = useAuth();
   const { transaction: initial } = route.params;
   const focusReviewPrompt = route?.params?.focusReviewPrompt;
   const [tx, setTx] = useState(initial);
@@ -88,7 +90,7 @@ export default function TransactionScreen({ navigation, route }) {
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const scrollRef = useRef(null);
   const reviewPromptYRef = useRef(0);
-  const reviewTargetUser = tx.provider.id === mockUser.id ? tx.requester : tx.provider;
+  const reviewTargetUser = tx.provider.id === authUser?.id ? tx.requester : tx.provider;
 
   const isProvider = tx.myRole === 'provider';
   const isRequester = tx.myRole === 'requester';
@@ -178,21 +180,22 @@ export default function TransactionScreen({ navigation, route }) {
     );
   };
 
-  const submitReview = () => {
+  const submitReview = async () => {
     if (!reviewRating) {
       Alert.alert('Add a rating', 'Please select a star rating before submitting your review.');
       return;
     }
-
     const reviewedUserId = reviewTargetUser.id;
-    const nextReview = addReviewToUserProfile(reviewedUserId, {
-      reviewer: mockUser.name,
+    const review = await dbSubmitReview({
+      reviewerId: authUser?.id,
+      revieweeId: reviewedUserId,
+      transactionId: tx.transactionId ?? tx.id ?? null,
       stars: reviewRating,
       comment: reviewComment,
       tags: selectedReviewTags,
     });
     setSubmittedReviewUserId(reviewedUserId);
-    setSubmittedReviewId(nextReview?.id ?? null);
+    setSubmittedReviewId(review?.id ?? null);
     setReviewSubmitted(true);
     setReviewPromptVisible(false);
     Alert.alert('Review submitted', 'Your feedback has been saved and will now appear on the user profile.');

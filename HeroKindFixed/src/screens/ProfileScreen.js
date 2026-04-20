@@ -8,8 +8,7 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import { mockUser } from '../data/mockData';
-import { fetchUserReviews, fetchTransactions, fetchLeaderboard } from '../lib/db';
+import { fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements } from '../lib/db';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
@@ -18,12 +17,24 @@ import { useAuth } from '../context/AuthContext';
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
 
-const ACHIEVEMENTS = [
-  { id: 'a1', emoji: '🔧', label: 'Tool Lender',     desc: '5+ tools lent',       unlocked: true  },
-  { id: 'a2', emoji: '🍱', label: 'Food Sharer',     desc: '3+ food shared',      unlocked: true  },
-  { id: 'a3', emoji: '⚡', label: 'Fast Responder',  desc: 'Avg reply < 5 min',   unlocked: true  },
-  { id: 'a4', emoji: '💯', label: 'Reliable',        desc: '10+ 5-star reviews',  unlocked: true  },
-  { id: 'a5', emoji: '🦸', label: 'Community Hero',  desc: 'Reach Level 5',       unlocked: false },
+const XP_LEVELS = [
+  { level: 1, xp: 0 },
+  { level: 2, xp: 100 },
+  { level: 3, xp: 200 },
+  { level: 4, xp: 500 },
+  { level: 5, xp: 1000 },
+];
+
+const getLevelFromXp = (xp) =>
+  XP_LEVELS.reduce((lvl, rule) => (xp ?? 0) >= rule.xp ? rule.level : lvl, 1);
+const getXpNext = (level) => XP_LEVELS.find(r => r.level === level + 1)?.xp ?? null;
+
+const ACHIEVEMENT_DEFS = [
+  { key: 'tool_lender',     emoji: '🔧', label: 'Tool Lender',    desc: '5+ tools lent'      },
+  { key: 'food_sharer',     emoji: '🍱', label: 'Food Sharer',    desc: '3+ food shared'     },
+  { key: 'fast_responder',  emoji: '⚡', label: 'Fast Responder', desc: 'Avg reply < 5 min'  },
+  { key: 'reliable',        emoji: '💯', label: 'Reliable',       desc: '10+ 5-star reviews' },
+  { key: 'community_hero',  emoji: '🦸', label: 'Community Hero', desc: 'Reach Level 5'      },
 ];
 
 const STATUS_COLOR = {
@@ -57,11 +68,12 @@ export default function ProfileScreen({ navigation }) {
   const [reviews, setReviews] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [weeklyRank, setWeeklyRank] = useState(null);
+  const [unlockedKeys, setUnlockedKeys] = useState([]);
   const { posts, removePost } = usePosts();
   const { friends } = useFriends();
   const { chats } = useChats();
   const { profile, user: authUser } = useAuth();
-  const user = profile ?? (__DEV__ ? mockUser : null);
+  const user = profile;
 
   useEffect(() => {
     if (!authUser?.id) return;
@@ -87,13 +99,24 @@ export default function ProfileScreen({ navigation }) {
       const idx = rows.findIndex(r => r.id === authUser.id);
       if (idx !== -1) setWeeklyRank(idx + 1);
     });
+    fetchUserAchievements(authUser.id).then(rows => {
+      setUnlockedKeys(rows.map(r => r.achievement_key));
+    });
+
   }, [authUser?.id]);
 
-  const xpPercent   = user ? Math.min(100, (user.xp / (user.xp_next ?? 200)) * 100) : 0;
-  const myNeeds     = user ? posts.filter(p => p.poster.id === user.id && p.type === 'need') : [];
-  const mySupplies  = user ? posts.filter(p => p.poster.id === user.id && p.type === 'supply') : [];
+  const computedLevel = user ? getLevelFromXp(user.xp) : 1;
+  const xpNext        = getXpNext(computedLevel);
+  const xpPercent     = user ? (xpNext ? Math.min(100, (user.xp / xpNext) * 100) : 100) : 0;
   const activeExchanges    = transactions.filter(t => t.status !== 'completed');
   const completedExchanges = transactions.filter(t => t.status === 'completed');
+  const completedTitles    = new Set(completedExchanges.map(t => t.item?.toLowerCase().trim()));
+  const isCompletedPost    = (p) => completedTitles.has(p.title?.toLowerCase().trim());
+  const myNeeds    = user ? posts.filter(p => (p.poster?.id === user.id || p.user_id === user.id) && p.type === 'need'   && !isCompletedPost(p)) : [];
+  const mySupplies = user ? posts.filter(p => (p.poster?.id === user.id || p.user_id === user.id) && p.type === 'supply' && !isCompletedPost(p)) : [];
+  const computedRating = reviews.length
+    ? Math.round((reviews.reduce((s, r) => s + r.stars, 0) / reviews.length) * 10) / 10
+    : (user?.stars ?? 0);
 
   const scrollRef    = useRef(null);
   const tabSectionY  = useRef(0);
@@ -121,9 +144,10 @@ export default function ProfileScreen({ navigation }) {
       onPress: () => Alert.alert('History', `${completedExchanges.length} completed exchange${completedExchanges.length === 1 ? '' : 's'} so far.`) },
   ];
 
-  const xpNext      = user.xp_next ?? 200;
-  const xpRemaining = Math.max(0, xpNext - user.xp);
-  const xpHint      = `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${(user.level ?? 1) + 1}`;
+  const xpRemaining = xpNext ? Math.max(0, xpNext - user.xp) : 0;
+  const xpHint      = xpNext
+    ? `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${computedLevel + 1}`
+    : 'You have reached the highest level!';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -155,7 +179,7 @@ export default function ProfileScreen({ navigation }) {
         {/* ---------- Profile card ---------- */}
         <View style={styles.profileCard}>
           <View style={styles.profileTop}>
-            <Avatar name={user.name} size={84} level={user.level} showBadge />
+            <Avatar name={user.name} size={84} level={computedLevel} showBadge />
             <View style={styles.identity}>
               <View style={styles.nameRow}>
                 <Text style={styles.userName} numberOfLines={1}>{user.name}</Text>
@@ -197,7 +221,7 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.statsStrip}>
           <View style={styles.statBox}>
             <Text style={styles.statEmoji}>⭐</Text>
-            <Text style={styles.statValue}>{user.stars.toFixed(1)}</Text>
+            <Text style={styles.statValue}>{computedRating.toFixed(1)}</Text>
             <Text style={styles.statLabel}>Rating</Text>
           </View>
           <View style={styles.statDivider} />
@@ -217,13 +241,13 @@ export default function ProfileScreen({ navigation }) {
         {/* ---------- Level card ---------- */}
         <View style={styles.levelCard}>
           <View style={styles.levelHeader}>
-            <Text style={styles.levelEmoji}>{LEVEL_EMOJIS[user.level - 1]}</Text>
+            <Text style={styles.levelEmoji}>{LEVEL_EMOJIS[computedLevel - 1]}</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.levelName}>
-                Level {user.level} — {LEVEL_NAMES[user.level - 1]}
+                Level {computedLevel} — {LEVEL_NAMES[computedLevel - 1]}
               </Text>
               <Text style={styles.levelXP}>
-                {user.xp} / {user.xp_next ?? 200} XP
+                {user.xp} / {xpNext ?? '—'} XP
               </Text>
             </View>
             <Text style={styles.levelPercent}>{Math.round(xpPercent)}%</Text>
@@ -297,20 +321,26 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Achievements</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {ACHIEVEMENTS.map(a => (
-              <View
-                key={a.id}
-                style={[styles.achieveCard, !a.unlocked && styles.achieveCardLocked]}
-              >
-                <Text style={[styles.achieveEmoji, !a.unlocked && { opacity: 0.4 }]}>
-                  {a.unlocked ? a.emoji : '🔒'}
-                </Text>
-                <Text style={[styles.achieveLabel, !a.unlocked && styles.achieveLabelLocked]}>
-                  {a.label}
-                </Text>
-                <Text style={styles.achieveDesc}>{a.desc}</Text>
-              </View>
-            ))}
+            {[
+              ...unlockedKeys.map(k => ACHIEVEMENT_DEFS.find(d => d.key === k)).filter(Boolean),
+              ...ACHIEVEMENT_DEFS.filter(d => !unlockedKeys.includes(d.key)),
+            ].map(a => {
+              const unlocked = unlockedKeys.includes(a.key);
+              return (
+                <View
+                  key={a.key}
+                  style={[styles.achieveCard, !unlocked && styles.achieveCardLocked]}
+                >
+                  <Text style={[styles.achieveEmoji, !unlocked && { opacity: 0.4 }]}>
+                    {unlocked ? a.emoji : '🔒'}
+                  </Text>
+                  <Text style={[styles.achieveLabel, !unlocked && styles.achieveLabelLocked]}>
+                    {a.label}
+                  </Text>
+                  <Text style={styles.achieveDesc}>{a.desc}</Text>
+                </View>
+              );
+            })}
           </ScrollView>
         </View>
 

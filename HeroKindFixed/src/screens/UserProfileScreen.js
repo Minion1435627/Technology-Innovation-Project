@@ -88,8 +88,13 @@ export default function UserProfileScreen({ navigation, route }) {
   const isMyProfile = userId === authUser?.id;
   const alreadyFriend = !isMyProfile && isFriend(userId);
   const canMessage = !isMyProfile && ((user.message_privacy ?? 'everyone') === 'everyone' || alreadyFriend);
-  const stars = Math.round(user.stars ?? 0);
-  const levelIdx = Math.min(Math.max((user.level ?? 1) - 1, 0), 4);
+  const computedRating = reviews.length
+    ? Math.round((reviews.reduce((s, r) => s + r.stars, 0) / reviews.length) * 10) / 10
+    : (user.stars ?? 0);
+  const stars = Math.round(computedRating);
+  const XP_THRESHOLDS = [0, 100, 200, 500, 1000];
+  const computedLevel = XP_THRESHOLDS.reduce((lvl, xp, i) => (user.xp ?? 0) >= xp ? i + 1 : lvl, 1);
+  const levelIdx = computedLevel - 1;
   const userPosts = posts.filter(p => p.user_id === userId || p.poster?.id === userId).slice(0, 3);
 
   const handleMessage = () => {
@@ -112,14 +117,14 @@ export default function UserProfileScreen({ navigation, route }) {
       <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.heroBlock}>
-          <Avatar name={user.name} size={80} level={user.level} />
+          <Avatar name={user.name} size={80} level={computedLevel} />
           <View style={styles.nameBlock}>
             <View style={styles.nameRow}>
               <Text style={styles.name}>{user.name}</Text>
               {user.verified && <Text style={styles.verifiedBadge}>✓</Text>}
             </View>
             <Text style={styles.levelLabel}>
-              {LEVEL_EMOJIS[levelIdx]} Level {user.level} · {LEVEL_NAMES[levelIdx]}
+              {LEVEL_EMOJIS[levelIdx]} Level {computedLevel} · {LEVEL_NAMES[levelIdx]}
             </Text>
             {user.gender && (
               <View style={[styles.genderBadge, { backgroundColor: GENDER_COLOR[user.gender] + '22', borderColor: GENDER_COLOR[user.gender] }]}>
@@ -143,7 +148,7 @@ export default function UserProfileScreen({ navigation, route }) {
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{'⭐'.repeat(stars)}</Text>
-            <Text style={styles.statLabel}>{(user.stars ?? 0).toFixed(1)} rating</Text>
+            <Text style={styles.statLabel}>{computedRating.toFixed(1)} rating</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>

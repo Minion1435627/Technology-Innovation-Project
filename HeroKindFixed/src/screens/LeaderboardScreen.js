@@ -15,6 +15,10 @@ const PODIUM_EMOJIS = ['🥇', '🥈', '🥉'];
 const PODIUM_HEIGHTS = [120, 88, 72];
 const PODIUM_ORDER = [1, 0, 2]; // display order: 2nd, 1st, 3rd
 
+const XP_THRESHOLDS = [0, 100, 200, 500, 1000];
+const getLevelFromXp = (xp) =>
+  XP_THRESHOLDS.reduce((lvl, threshold, i) => (xp ?? 0) >= threshold ? i + 1 : lvl, 1);
+
 export default function LeaderboardScreen({ navigation }) {
   const [leaderboard, setLeaderboard] = useState([]);
   const { user: authUser } = useAuth();
@@ -25,6 +29,7 @@ export default function LeaderboardScreen({ navigation }) {
         ...r,
         rank: i + 1,
         score: r.weekly_score ?? 0,
+        computedLevel: getLevelFromXp(r.xp),
       })));
     });
   }, []);
@@ -66,7 +71,7 @@ export default function LeaderboardScreen({ navigation }) {
                   {/* Avatar + name above platform */}
                   <View style={styles.podiumAvatarSection}>
                     <Text style={styles.podiumEmoji}>{PODIUM_EMOJIS[idx]}</Text>
-                    <Avatar name={user.name} size={idx === 0 ? 64 : 52} level={user.level} />
+                    <Avatar name={user.name} size={idx === 0 ? 64 : 52} level={user.computedLevel} />
                     <Text style={styles.podiumName}>{user.name}</Text>
                     <View style={styles.podiumScoreBadge}>
                       <Text style={styles.podiumScore}>{user.score} pts</Text>
@@ -141,7 +146,7 @@ function LeaderboardRow({ user, isMe, isTop3 }) {
       <View style={[styles.rankCircle, isTop3 && { backgroundColor: rankColor + '33' }]}>
         <Text style={[styles.rankText, isTop3 && { color: rankColor }]}>{user.rank}</Text>
       </View>
-      <Avatar name={user.name} size={40} level={user.level} showBadge />
+      <Avatar name={user.name} size={40} level={user.computedLevel} showBadge />
       <View style={styles.rowInfo}>
         <View style={styles.rowNameRow}>
           <Text style={[styles.rowName, isMe && styles.rowNameMe]}>{user.name}</Text>

@@ -84,6 +84,48 @@ export async function removeFriend(userId, friendId) {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
+export async function submitReview({ reviewerId, revieweeId, transactionId, stars, comment, tags }) {
+  const { data: review, error } = await supabase
+    .from('reviews')
+    .insert({ reviewer_id: reviewerId, reviewee_id: revieweeId, transaction_id: transactionId, stars, comment })
+    .select()
+    .single();
+  if (error) { console.error('submitReview:', error.message); return null; }
+
+  if (tags?.length) {
+    const tagRows = await Promise.all(
+      tags.map(label => supabase.from('review_tags').select('id').eq('label', label).maybeSingle())
+    );
+    const tagInserts = tagRows
+      .map(r => r.data?.id)
+      .filter(Boolean)
+      .map(tagId => ({ review_id: review.id, tag_id: tagId }));
+    if (tagInserts.length) await supabase.from('review_selected_tags').insert(tagInserts);
+  }
+
+  // Recalculate reviewee's star rating
+  const { data: avg } = await supabase
+    .from('reviews')
+    .select('stars')
+    .eq('reviewee_id', revieweeId);
+  if (avg?.length) {
+    const newStars = avg.reduce((sum, r) => sum + r.stars, 0) / avg.length;
+    await supabase.from('users').update({ stars: Math.round(newStars * 10) / 10 }).eq('id', revieweeId);
+  }
+
+  return review;
+}
+
+export async function fetchUserAchievements(userId) {
+  const { data, error } = await supabase
+    .from('user_achievements')
+    .select('achievement_key, unlocked_at')
+    .eq('user_id', userId)
+    .order('unlocked_at', { ascending: false });
+  if (error) console.error('fetchUserAchievements:', error.message);
+  return data ?? [];
+}
+
 export async function fetchUserReviews(userId) {
   const { data, error } = await supabase
     .from('reviews')
@@ -175,7 +217,7 @@ export async function sendMessage(chatId, senderId, text) {
 export async function fetchLeaderboard() {
   const { data, error } = await supabase
     .from('users')
-    .select('id, name, level, stars, weekly_score, neighbourhood')
+    .select('id, name, level, xp, stars, weekly_score, neighbourhood')
     .order('weekly_score', { ascending: false })
     .limit(20);
   if (error) console.warn('fetchLeaderboard:', error.message);
@@ -210,5 +252,28 @@ export async function updateTransactionStatus(transactionId, status) {
     .update(fields)
     .eq('id', transactionId);
   if (error) console.error('updateTransactionStatus:', error.message);
+
+  // Deactivate the linked post when transaction completes
+  if (!error && status === 'completed') {
+    const { data: tx } = await supabase
+      .from('transactions')
+      .select('chat_id')
+      .eq('id', transactionId)
+      .maybeSingle();
+    if (tx?.chat_id) {
+      const { data: chat } = await supabase
+        .from('chats')
+        .select('post_title')
+        .eq('id', tx.chat_id)
+        .maybeSingle();
+      if (chat?.post_title) {
+        await supabase
+          .from('posts')
+          .update({ is_active: false })
+          .ilike('title', chat.post_title);
+      }
+    }
+  }
+
   return !error;
 }

@@ -21,11 +21,11 @@ const ACTIONS = [
 ];
 
 const LEVEL_RULES = [
-  { level: 1, score: 0, name: 'Newcomer' },
-  { level: 2, score: 100, name: 'Helper' },
-  { level: 3, score: 180, name: 'Trusted Neighbour' },
-  { level: 4, score: 300, name: 'Community Pillar' },
-  { level: 5, score: 500, name: 'Legend' },
+  { level: 1, score: 0,    name: 'Newcomer' },
+  { level: 2, score: 100,  name: 'Helper' },
+  { level: 3, score: 200,  name: 'Trusted Neighbour' },
+  { level: 4, score: 500,  name: 'Community Pillar' },
+  { level: 5, score: 1000, name: 'Legend' },
 ];
 
 const SEED_PACKETS = [

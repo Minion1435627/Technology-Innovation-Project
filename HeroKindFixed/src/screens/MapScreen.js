@@ -15,7 +15,7 @@ import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
 import { usePrivacy } from '../context/PrivacyContext';
-import { mockUser, mockOtherUsers, mockChats } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 
 // Distance options in km
 const DISTANCE_OPTIONS = [0.5, 1, 2, 5];
@@ -86,6 +86,7 @@ function PinMarker({ pin }) {
 export default function MapScreen({ navigation }) {
   const insets  = useSafeAreaInsets();
   const mapRef  = useRef(null);
+  const { user: authUser } = useAuth();
   const { posts, removePost } = usePosts();
   const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
   const { chats } = useChats();
@@ -132,24 +133,14 @@ export default function MapScreen({ navigation }) {
 
   const centre = useLocationForMap ? (userLocation ?? FALLBACK_LOCATION) : FALLBACK_LOCATION;
 
-  const getPosterProfile = (poster) => {
-    if (!poster) return null;
-    if (poster.id === mockUser.id) return mockUser;
-    return mockOtherUsers[poster.id] ?? poster;
-  };
-
-  const getPosterWithPrivacy = (poster) => {
-    const profile = getPosterProfile(poster);
-    return {
-      ...profile,
-      ...poster,
-      messagePrivacy: profile?.messagePrivacy ?? poster?.messagePrivacy ?? 'everyone',
-    };
-  };
+  const getPosterWithPrivacy = (poster) => ({
+    ...poster,
+    messagePrivacy: poster?.message_privacy ?? poster?.messagePrivacy ?? 'everyone',
+  });
 
   const canContactPoster = (poster) => (
-    poster?.id !== mockUser.id &&
-    ((poster?.messagePrivacy ?? 'everyone') === 'everyone' || isFriend(poster.id))
+    poster?.id !== authUser?.id &&
+    ((poster?.message_privacy ?? poster?.messagePrivacy ?? 'everyone') === 'everyone' || isFriend(poster.id))
   );
 
   // Friends first (by distance), then Need/Supply (by distance)
@@ -490,7 +481,7 @@ export default function MapScreen({ navigation }) {
 
               {/* Actions */}
               <View style={styles.tooltipActions}>
-                {tooltip.poster.id === mockUser.id ? (
+                {tooltip.poster.id === authUser?.id ? (
                   <TouchableOpacity
                     style={styles.tooltipDeleteBtn}
                     onPress={() => {

@@ -8,11 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { useAuth } from '../context/AuthContext';
-import { mockUser } from '../data/mockData';
-
 export default function SettingsScreen({ navigation }) {
   const { profile, signOut } = useAuth();
-  const user = profile ?? (__DEV__ ? mockUser : null);
+  const user = profile;
 
   const [notifMessages,  setNotifMessages]  = useState(true);
   const [notifExchanges, setNotifExchanges] = useState(true);
