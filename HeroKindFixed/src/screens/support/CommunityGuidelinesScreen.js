@@ -11,7 +11,7 @@ const GUIDELINES = [
   {
     emoji: '🤝',
     title: 'Be kind and respectful',
-    body: 'HeroKind is built on trust. Treat every neighbour the way you\'d want to be treated — with patience, warmth, and respect. Rude or dismissive behaviour won\'t be tolerated.',
+    body: 'HelpMate is built on trust. Treat every neighbour the way you\'d want to be treated — with patience, warmth, and respect. Rude or dismissive behaviour won\'t be tolerated.',
   },
   {
     emoji: '✅',
@@ -31,7 +31,7 @@ const GUIDELINES = [
   {
     emoji: '🚫',
     title: 'No commercial activity or spam',
-    body: 'HeroKind is for genuine community exchanges, not advertising or sales. Do not post promotional content, solicit money, or spam users in chat.',
+    body: 'HelpMate is for genuine community exchanges, not advertising or sales. Do not post promotional content, solicit money, or spam users in chat.',
   },
   {
     emoji: '🛡️',
@@ -84,7 +84,7 @@ export default function CommunityGuidelinesScreen({ navigation }) {
           <Text style={styles.heroEmoji}>🌱</Text>
           <Text style={styles.heroTitle}>Our Community Values</Text>
           <Text style={styles.heroSub}>
-            HeroKind works because neighbours trust each other. These guidelines help us keep that trust alive.
+            HelpMate works because neighbours trust each other. These guidelines help us keep that trust alive.
           </Text>
         </View>
 

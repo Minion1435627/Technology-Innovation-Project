@@ -7,15 +7,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import PostCard from '../components/PostCard';
-import { mockNeeds, mockSupplies } from '../data/mockData';
+import { usePosts } from '../context/PostsContext';
 
 const SORT_OPTIONS = ['Nearest first', 'Most urgent', 'Most recent'];
 
 export default function NearbyListScreen({ navigation }) {
+  const { posts } = usePosts();
   const [activeTab, setActiveTab] = useState('needs');
   const [sortIndex, setSortIndex] = useState(0);
 
-  const data = activeTab === 'needs' ? mockNeeds : mockSupplies;
+  const needs   = posts.filter(p => p.type === 'need');
+  const supply  = posts.filter(p => p.type === 'supply');
+  const data    = activeTab === 'needs' ? needs : supply;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -34,8 +37,8 @@ export default function NearbyListScreen({ navigation }) {
       {/* Tabs */}
       <View style={styles.tabBar}>
         {[
-          { key: 'needs', label: '🆘 Needs', count: mockNeeds.length },
-          { key: 'supply', label: '📦 Supply', count: mockSupplies.length },
+          { key: 'needs', label: '🆘 Needs', count: needs.length },
+          { key: 'supply', label: '📦 Supply', count: supply.length },
         ].map(tab => (
           <TouchableOpacity
             key={tab.key}

@@ -1,16 +1,19 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { mockOtherUsers, mockUser } from '../data/mockData';
+import { fetchUserProfile, fetchUserReviews } from '../lib/db';
 import { useFriends } from '../context/FriendsContext';
-import { usePrivacy } from '../context/PrivacyContext';
+import { useChats } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
+import { usePosts } from '../context/PostsContext';
 
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
+const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const GENDER_ICON  = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
 const GENDER_COLOR = { Male: '#4dabf7', Female: '#f783ac', 'Non-binary': '#a78bfa' };
 const TYPE_COLOR = { need: colors.need, supply: colors.supply };
@@ -19,17 +22,54 @@ const TYPE_LABEL = { need: 'Need', supply: 'Supply' };
 export default function UserProfileScreen({ navigation, route }) {
   const userId = route?.params?.userId;
   const highlightReviewId = route?.params?.highlightReviewId;
-  const user = userId === mockUser.id ? mockUser : mockOtherUsers[userId];
+  const { user: authUser } = useAuth();
+  const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
+  const { chats } = useChats();
+  const { posts } = usePosts();
+
+  const [user, setUser] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   const scrollRef = useRef(null);
   const highlightedReviewYRef = useRef(0);
-  const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
-  const { messagePrivacy: myPrivacy } = usePrivacy();
-  const isMyProfile = userId === mockUser.id;
-  const alreadyFriend = !isMyProfile && isFriend(userId);
-  // Can message if: their setting is 'everyone', OR we're already friends
-  const canMessage = !isMyProfile && (
-    (user?.messagePrivacy ?? 'everyone') === 'everyone' || alreadyFriend
-  );
+
+  useEffect(() => {
+    if (!userId) { setLoading(false); return; }
+    Promise.all([
+      fetchUserProfile(userId),
+      fetchUserReviews(userId),
+    ]).then(([profile, reviewRows]) => {
+      setUser(profile);
+      setReviews(reviewRows.map(r => ({
+        id: r.id,
+        reviewer: r.reviewer?.name ?? 'Anonymous',
+        stars: r.stars,
+        date: new Date(r.created_at).toLocaleDateString(),
+        comment: r.comment ?? '',
+        tags: (r.review_selected_tags ?? []).map(t => t.review_tags?.label).filter(Boolean),
+      })));
+      setLoading(false);
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    if (!highlightReviewId) return;
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(highlightedReviewYRef.current - 24, 0), animated: true });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [highlightReviewId]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.notFound}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!user) {
     return (
@@ -45,25 +85,27 @@ export default function UserProfileScreen({ navigation, route }) {
     );
   }
 
-  const stars = Math.round(user.stars);
+  const isMyProfile = userId === authUser?.id;
+  const alreadyFriend = !isMyProfile && isFriend(userId);
+  const canMessage = !isMyProfile && ((user.message_privacy ?? 'everyone') === 'everyone' || alreadyFriend);
+  const computedRating = reviews.length
+    ? Math.round((reviews.reduce((s, r) => s + r.stars, 0) / reviews.length) * 10) / 10
+    : (user.stars ?? 0);
+  const stars = Math.round(computedRating);
+  const XP_THRESHOLDS = [0, 100, 200, 500, 1000];
+  const computedLevel = XP_THRESHOLDS.reduce((lvl, xp, i) => (user.xp ?? 0) >= xp ? i + 1 : lvl, 1);
+  const levelIdx = computedLevel - 1;
+  const userPosts = posts.filter(p => p.user_id === userId || p.poster?.id === userId).slice(0, 3);
 
-  useEffect(() => {
-    if (!highlightReviewId) return;
-
-    const timer = setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(highlightedReviewYRef.current - 24, 0),
-        animated: true,
-      });
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, [highlightReviewId]);
+  const handleMessage = () => {
+    const existing = chats.find(c => c.user?.id === userId);
+    navigation.navigate('ChatDetail', {
+      chat: existing ?? { user: { id: user.id, name: user.name, stars: user.stars, gender: user.gender }, postTitle: 'Direct message' },
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backIconBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
@@ -74,16 +116,15 @@ export default function UserProfileScreen({ navigation, route }) {
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
-        {/* Avatar + name block */}
         <View style={styles.heroBlock}>
-          <Avatar name={user.name} size={80} level={user.level} />
+          <Avatar name={user.name} size={80} level={computedLevel} />
           <View style={styles.nameBlock}>
             <View style={styles.nameRow}>
               <Text style={styles.name}>{user.name}</Text>
               {user.verified && <Text style={styles.verifiedBadge}>✓</Text>}
             </View>
             <Text style={styles.levelLabel}>
-              {LEVEL_EMOJIS[user.level - 1]} Level {user.level} · {user.levelName}
+              {LEVEL_EMOJIS[levelIdx]} Level {computedLevel} · {LEVEL_NAMES[levelIdx]}
             </Text>
             {user.gender && (
               <View style={[styles.genderBadge, { backgroundColor: GENDER_COLOR[user.gender] + '22', borderColor: GENDER_COLOR[user.gender] }]}>
@@ -92,45 +133,39 @@ export default function UserProfileScreen({ navigation, route }) {
                 </Text>
               </View>
             )}
-            <Text style={styles.neighbourhood}>📍 {user.neighbourhood} · Joined {user.joinDate}</Text>
+            <Text style={styles.neighbourhood}>
+              📍 {user.neighbourhood ?? '—'} · Joined {user.join_date ?? ''}
+            </Text>
           </View>
         </View>
 
-        {/* Bio */}
-        {user.bio && (
+        {!!user.bio && (
           <View style={styles.bioBlock}>
             <Text style={styles.bioText}>{user.bio}</Text>
           </View>
         )}
 
-        {/* Stats row */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{'⭐'.repeat(stars)}</Text>
-            <Text style={styles.statLabel}>{user.stars} rating</Text>
+            <Text style={styles.statLabel}>{computedRating.toFixed(1)} rating</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{user.totalReviews}</Text>
+            <Text style={styles.statValue}>{reviews.length}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>
-              {isMyProfile ? friendIds.length : (user.friends?.length ?? 0)}
-            </Text>
+            <Text style={styles.statValue}>{isMyProfile ? friendIds.length : '—'}</Text>
             <Text style={styles.statLabel}>Friends</Text>
           </View>
         </View>
 
-        {/* Action buttons */}
         {!isMyProfile && (
           <View style={styles.actions}>
             {canMessage ? (
-              <TouchableOpacity
-                style={styles.msgBtn}
-                onPress={() => navigation.navigate('ChatDetail', { chat: { user, postTitle: 'Direct message' } })}
-              >
+              <TouchableOpacity style={styles.msgBtn} onPress={handleMessage}>
                 <Text style={styles.msgBtnText}>💬 Message</Text>
               </TouchableOpacity>
             ) : (
@@ -141,7 +176,7 @@ export default function UserProfileScreen({ navigation, route }) {
             )}
             <TouchableOpacity
               style={[styles.addBtn, alreadyFriend && styles.addBtnActive]}
-              onPress={() => alreadyFriend ? removeFriend(userId) : addFriend(userId)}
+              onPress={() => alreadyFriend ? removeFriend(userId) : addFriend(userId, user)}
             >
               <Text style={[styles.addBtnText, alreadyFriend && styles.addBtnTextActive]}>
                 {alreadyFriend ? '✓ Friends' : '+ Add Friend'}
@@ -150,11 +185,10 @@ export default function UserProfileScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Posts */}
-        {user.posts?.length > 0 && (
+        {userPosts.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recent Posts</Text>
-            {user.posts.map(post => (
+            {userPosts.map(post => (
               <View key={post.id} style={styles.postRow}>
                 <View style={[styles.postTypeBadge, { backgroundColor: TYPE_COLOR[post.type] + '22' }]}>
                   <Text style={[styles.postTypeText, { color: TYPE_COLOR[post.type] }]}>
@@ -170,18 +204,15 @@ export default function UserProfileScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Reviews */}
-        {user.reviews?.length > 0 && (
+        {reviews.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Reviews ({user.reviews.length})</Text>
-            {user.reviews.map(review => (
+            <Text style={styles.sectionTitle}>Reviews ({reviews.length})</Text>
+            {reviews.map(review => (
               <View
                 key={review.id}
                 style={[styles.reviewCard, review.id === highlightReviewId && styles.reviewCardHighlighted]}
-                onLayout={event => {
-                  if (review.id === highlightReviewId) {
-                    highlightedReviewYRef.current = event.nativeEvent.layout.y;
-                  }
+                onLayout={e => {
+                  if (review.id === highlightReviewId) highlightedReviewYRef.current = e.nativeEvent.layout.y;
                 }}
               >
                 <View style={styles.reviewHeader}>
@@ -214,7 +245,6 @@ export default function UserProfileScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
@@ -224,9 +254,7 @@ const styles = StyleSheet.create({
   backIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   backIcon: { fontSize: 22, color: colors.primary },
   headerTitle: { ...typography.h3, color: colors.textPrimary },
-
   container: { padding: 20, gap: 16, paddingBottom: 40 },
-
   heroBlock: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   nameBlock: { flex: 1, gap: 4 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -242,13 +270,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3,
   },
   genderBadgeText: { ...typography.caption, fontWeight: '700' },
-
   bioBlock: {
     backgroundColor: colors.card, borderRadius: 14, padding: 14,
     borderWidth: 1, borderColor: colors.border,
   },
   bioText: { ...typography.body, color: colors.textPrimary, lineHeight: 22 },
-
   statsRow: {
     flexDirection: 'row', backgroundColor: colors.card,
     borderRadius: 14, padding: 16,
@@ -258,13 +284,18 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, backgroundColor: colors.border },
   statValue: { ...typography.h3, color: colors.textPrimary },
   statLabel: { ...typography.caption, color: colors.textSecondary },
-
   actions: { flexDirection: 'row', gap: 12 },
   msgBtn: {
     flex: 1, backgroundColor: colors.primary, borderRadius: 14,
     padding: 14, alignItems: 'center',
   },
   msgBtnText: { ...typography.button, color: colors.textWhite },
+  msgBtnLocked: {
+    flex: 1, borderWidth: 1.5, borderColor: colors.border,
+    borderRadius: 14, padding: 14, alignItems: 'center', gap: 2,
+  },
+  msgBtnLockedText: { ...typography.smallBold, color: colors.textSecondary },
+  msgBtnLockedSub: { ...typography.caption, color: colors.textMuted },
   addBtn: {
     flex: 1, borderWidth: 1.5, borderColor: colors.primary,
     borderRadius: 14, padding: 14, alignItems: 'center',
@@ -272,28 +303,8 @@ const styles = StyleSheet.create({
   addBtnActive: { backgroundColor: colors.primary },
   addBtnText: { ...typography.button, color: colors.primary },
   addBtnTextActive: { color: colors.textWhite },
-
   section: { gap: 10 },
   sectionTitle: { ...typography.h4, color: colors.textPrimary },
-  reviewCardHighlighted: {
-    borderColor: colors.primary,
-    borderWidth: 1.5,
-    backgroundColor: colors.primaryLight,
-  },
-  newReviewBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginBottom: 8,
-  },
-  newReviewBadgeText: {
-    ...typography.caption,
-    color: colors.textWhite,
-    fontWeight: '700',
-  },
-
   postRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: colors.card, borderRadius: 12, padding: 12,
@@ -304,23 +315,24 @@ const styles = StyleSheet.create({
   postInfo: { flex: 1 },
   postTitle: { ...typography.smallBold, color: colors.textPrimary },
   postMeta: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-
   reviewCard: {
     backgroundColor: colors.card, borderRadius: 14, padding: 14, gap: 8,
     borderWidth: 1, borderColor: colors.border,
   },
+  reviewCardHighlighted: { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: colors.primaryLight },
+  newReviewBadge: {
+    alignSelf: 'flex-start', backgroundColor: colors.primary,
+    borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8,
+  },
+  newReviewBadgeText: { ...typography.caption, color: colors.textWhite, fontWeight: '700' },
   reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   reviewerName: { ...typography.smallBold, color: colors.textPrimary, flex: 1 },
   reviewStars: { fontSize: 12 },
   reviewDate: { ...typography.caption, color: colors.textMuted },
   reviewComment: { ...typography.body, color: colors.textSecondary, lineHeight: 20 },
   reviewTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tag: {
-    backgroundColor: colors.primaryLight, borderRadius: 20,
-    paddingHorizontal: 10, paddingVertical: 3,
-  },
+  tag: { backgroundColor: colors.primaryLight, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
   tagText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   notFoundEmoji: { fontSize: 48 },
   notFoundText: { ...typography.h3, color: colors.textSecondary },

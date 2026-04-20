@@ -7,16 +7,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
-import { mockUser } from '../data/mockData';
-
+import { useAuth } from '../context/AuthContext';
 export default function SettingsScreen({ navigation }) {
-  const user = mockUser;
+  const { profile, signOut } = useAuth();
+  const user = profile;
 
   const [notifMessages,  setNotifMessages]  = useState(true);
   const [notifExchanges, setNotifExchanges] = useState(true);
   const [notifReminders, setNotifReminders] = useState(true);
   const [notifXP,        setNotifXP]        = useState(false);
   const [darkMode,       setDarkMode]       = useState(false);
+
+  if (!user) return null;
 
   const todo = (label) => Alert.alert(label, `${label} screen coming soon.`);
 
@@ -26,7 +28,10 @@ export default function SettingsScreen({ navigation }) {
       {
         text: 'Log out',
         style: 'destructive',
-        onPress: () => navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Login' }] }),
+        onPress: async () => {
+          await signOut();
+          navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Login' }] });
+        },
       },
     ]);
   };

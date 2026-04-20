@@ -35,7 +35,7 @@ export default function LocationSettingsScreen({ navigation }) {
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
-          Choose how your location appears to neighbours. HeroKind only shares nearby area details, not your exact live position.
+          Choose how your location appears to neighbours. HelpMate only shares nearby area details, not your exact live position.
         </Text>
 
         <View style={styles.notice}>
@@ -50,7 +50,7 @@ export default function LocationSettingsScreen({ navigation }) {
           <ToggleRow
             icon="navigate-outline"
             label="Use my location for nearby posts"
-            description="When this is off, HeroKind uses the default neighbourhood map instead of your current GPS."
+            description="When this is off, HelpMate uses the default neighbourhood map instead of your current GPS."
             value={useLocationForMap}
             onValueChange={value => updateLocationSetting('useLocationForMap', value)}
           />

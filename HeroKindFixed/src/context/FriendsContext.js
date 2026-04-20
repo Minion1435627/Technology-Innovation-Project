@@ -1,18 +1,37 @@
-import React, { createContext, useContext, useState } from 'react';
-
-const INITIAL_FRIEND_IDS = ['u6', 'u7', 'u2', 'u8'];
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { fetchFriends, addFriend as dbAddFriend, removeFriend as dbRemoveFriend } from '../lib/db';
+import { useAuth } from './AuthContext';
 
 const FriendsContext = createContext(null);
 
 export function FriendsProvider({ children }) {
-  const [friendIds, setFriendIds] = useState(INITIAL_FRIEND_IDS);
+  const [friends, setFriends] = useState([]);
+  const { user } = useAuth();
 
-  const addFriend = (id) => setFriendIds(prev => prev.includes(id) ? prev : [...prev, id]);
-  const removeFriend = (id) => setFriendIds(prev => prev.filter(f => f !== id));
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchFriends(user.id).then(rows => {
+      setFriends(rows.map(r => r.friend).filter(Boolean));
+    });
+  }, [user?.id]);
+
+  const friendIds = friends.map(f => f.id);
+
+  const addFriend = async (id, userObj) => {
+    if (friendIds.includes(id)) return;
+    if (user?.id) await dbAddFriend(user.id, id);
+    setFriends(prev => [...prev, userObj ?? { id }]);
+  };
+
+  const removeFriend = async (id) => {
+    if (user?.id) await dbRemoveFriend(user.id, id);
+    setFriends(prev => prev.filter(f => f.id !== id));
+  };
+
   const isFriend = (id) => friendIds.includes(id);
 
   return (
-    <FriendsContext.Provider value={{ friendIds, addFriend, removeFriend, isFriend }}>
+    <FriendsContext.Provider value={{ friends, friendIds, addFriend, removeFriend, isFriend }}>
       {children}
     </FriendsContext.Provider>
   );

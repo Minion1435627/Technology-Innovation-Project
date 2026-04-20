@@ -8,8 +8,10 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import { CHAT_MESSAGE_SCENARIOS } from '../data/mockData';
 import { useChats } from '../context/ChatContext';
+import { fetchMessages, sendMessage as dbSendMessage, createTransaction, updateTransactionStatus, createChat, fetchTransactionById } from '../lib/db';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 const ATTACHMENT_PROOF_OPTIONS = [
   { id: 'general', label: 'General photo' },
@@ -442,7 +444,8 @@ const EXCHANGE_STATUS_CONFIG = {
 };
 
 export default function ChatScreen({ navigation, route }) {
-  const { addChat, updateLastMessage } = useChats();
+  const { addChat, updateLastMessage, refreshChatExchange } = useChats();
+  const { user, profile } = useAuth();
   const [input, setInput] = useState('');
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [startExchangeOpen, setStartExchangeOpen] = useState(false);
@@ -463,17 +466,13 @@ export default function ChatScreen({ navigation, route }) {
   const [selectedLocationType, setSelectedLocationType] = useState('live');
 
   const chat = route?.params?.chat;
-  // For new chats that have no id yet, generate a stable id for this session
   const newChatIdRef = useRef(`c_${Date.now()}`);
   const effectiveChatId = chat?.id ?? newChatIdRef.current;
+  const isDbChatId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const [dbChatId, setDbChatId] = useState(() => isDbChatId(chat?.id) ? chat.id : null);
   const otherUserId = chat?.user?.id ?? 'u6';
   const otherUserName = chat?.user?.name ?? 'David M.';
   const otherUserGender = chat?.user?.gender;
-  const initialMessages = useMemo(() => {
-    if (chat?.id && CHAT_MESSAGE_SCENARIOS[chat.id]) return CHAT_MESSAGE_SCENARIOS[chat.id];
-    return [];
-  }, [chat?.id]);
-
   // Register a brand-new chat in the list when opening from the map
   useEffect(() => {
     if (!chat?.id) {
@@ -496,8 +495,40 @@ export default function ChatScreen({ navigation, route }) {
       typeLabel: 'Post',
       description: 'Open the original post for the full task details.',
     };
-  const [messages, setMessages] = useState(initialMessages);
-  const [exchange, setExchange] = useState(chat?.id ? EXCHANGE_META[chat.id] ?? null : null);
+  const [messages, setMessages] = useState([]);
+
+  // Load messages from DB and subscribe to realtime inserts
+  useEffect(() => {
+    if (!dbChatId) return;
+
+    const mapMsg = (m) => ({
+      id: m.id,
+      sender: m.sender_id === user?.id ? 'me' : 'them',
+      text: m.text,
+      time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: true,
+    });
+
+    fetchMessages(dbChatId).then(rows => setMessages(rows.map(mapMsg)));
+
+    const channel = supabase
+      .channel(`chat_messages_${dbChatId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'HelpMate',
+        table: 'messages',
+        filter: `chat_id=eq.${dbChatId}`,
+      }, ({ new: m }) => {
+        setMessages(prev =>
+          prev.some(p => p.id === m.id) ? prev : [...prev, mapMsg(m)]
+        );
+        setTimeout(() => scrollToLatest(true), 30);
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [dbChatId, user?.id]);
+  const [exchange, setExchange] = useState(chat?.exchange ?? (chat?.id ? EXCHANGE_META[chat.id] ?? null : null));
   const [showScrollUpBtn, setShowScrollUpBtn] = useState(false);
   const [showScrollDownBtn, setShowScrollDownBtn] = useState(false);
   const listRef = useRef(null);
@@ -622,7 +653,31 @@ export default function ChatScreen({ navigation, route }) {
     notes: exchange?.type === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
   });
 
-  const openTransaction = () => {
+  const openTransaction = async () => {
+    const txId = exchange?.transactionId;
+    if (txId) {
+      const tx = await fetchTransactionById(txId);
+      if (tx) {
+        const myRole = tx.provider_id === user?.id ? 'provider' : 'requester';
+        navigation.navigate('Transaction', {
+          transaction: {
+            id: tx.id,
+            status: tx.status,
+            type: tx.type ?? 'borrow',
+            postTitle: chat?.postTitle ?? 'Exchange',
+            item: tx.item ?? chat?.postTitle ?? 'Item',
+            provider: tx.provider ?? { id: tx.provider_id, name: otherUserName },
+            requester: tx.requester ?? { id: tx.requester_id, name: 'Unknown' },
+            myRole,
+            pendingBy: myRole === 'requester' ? 'requester' : 'provider',
+            handoverDate: tx.handover_date ?? new Date().toISOString(),
+            agreedReturnDate: tx.agreed_return_date ?? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+            notes: 'Agreed return and handover via chat.',
+          },
+        });
+        return;
+      }
+    }
     navigation.navigate('Transaction', { transaction: buildTransactionPayload() });
   };
 
@@ -655,6 +710,11 @@ export default function ChatScreen({ navigation, route }) {
         ? 'The exchange is active until the supplier marks the task completed'
         : 'The exchange is active until the supplier confirms completion',
     }));
+    if (exchange.transactionId) {
+      updateTransactionStatus(exchange.transactionId, 'in_progress').then(() =>
+        refreshChatExchange(dbChatId)
+      );
+    }
     addSystemEvent(
       'Started',
       exchange.type === 'service'
@@ -688,6 +748,11 @@ export default function ChatScreen({ navigation, route }) {
     );
     setCompleteConfirmOpen(false);
     setReviewPromptConfirmOpen(true);
+    if (exchange.transactionId) {
+      updateTransactionStatus(exchange.transactionId, 'completed').then(() =>
+        refreshChatExchange(dbChatId)
+      );
+    }
   };
 
   const openReviewPromptInTransaction = () => {
@@ -740,10 +805,11 @@ export default function ChatScreen({ navigation, route }) {
     setStatusReasonOpen(true);
   };
 
-  const startExchange = () => {
+  const startExchange = async () => {
     const nextExchange = {
       state: 'pending',
       type: draftExchangeType,
+      myRole: 'requester',
       pendingBy: 'requester',
       typeLabel: draftExchangeType === 'service' ? 'Help / service' : 'Borrowed item',
       statusLabel: 'Pending',
@@ -752,26 +818,45 @@ export default function ChatScreen({ navigation, route }) {
       actionLabel: 'View Exchange',
     };
 
-    setExchange(nextExchange);
     addSystemEvent(
       'Pending',
       'A start request was sent. This exchange is now waiting for the other side to accept.',
       'swap-horizontal-outline'
     );
     setStartExchangeOpen(false);
+
+    const agreedReturnDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Save to DB if this is a real chat
+    let savedTx = null;
+    if (user?.id && isDbChatId(effectiveChatId)) {
+      savedTx = await createTransaction({
+        requester_id: user.id,
+        provider_id: otherUserId,
+        type: draftExchangeType,
+        item: chat?.postTitle ?? 'Item',
+        status: 'pending',
+        chat_id: effectiveChatId,
+        agreed_return_date: agreedReturnDate,
+      });
+    }
+
+    setExchange({ ...nextExchange, transactionId: savedTx?.id ?? null });
+    if (savedTx?.id) refreshChatExchange(effectiveChatId);
+
     navigation.navigate('Transaction', {
       transaction: {
-        id: `t_${Date.now()}`,
+        id: savedTx?.id ?? `t_${Date.now()}`,
         status: 'pending',
         type: draftExchangeType,
         postTitle: chat?.postTitle ?? 'Exchange',
         item: chat?.postTitle ?? 'Item',
         provider: { id: otherUserId, name: otherUserName, level: 3, stars: 4.7 },
-        requester: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
+        requester: { id: user?.id, name: profile?.name ?? user?.email, level: profile?.level ?? 1, stars: profile?.stars ?? 5 },
         myRole: 'requester',
         pendingBy: 'requester',
         handoverDate: new Date().toISOString(),
-        agreedReturnDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        agreedReturnDate,
         notes: draftExchangeType === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
       },
     });
@@ -932,19 +1017,36 @@ export default function ChatScreen({ navigation, route }) {
     setTimeout(() => action.onPress?.(), 120);
   };
 
-  const send = () => {
+  const send = async () => {
     if (!input.trim()) return;
+    const text = input.trim();
     const newMsg = {
       id: `m${Date.now()}`,
       sender: 'me',
-      text: input.trim(),
+      text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       read: false,
     };
     setMessages(prev => [...prev, newMsg]);
-    updateLastMessage(effectiveChatId, newMsg.text, newMsg.time);
     setInput('');
     setTimeout(() => scrollToLatest(true), 30);
+
+    if (!user?.id) return;
+
+    let chatId = dbChatId;
+    // First message in a new chat — create the chat record in DB
+    if (!chatId && chat?.user?.id) {
+      const saved = await createChat(user.id, chat.user.id);
+      if (saved?.id) {
+        chatId = saved.id;
+        setDbChatId(chatId);
+      }
+    }
+
+    if (chatId) {
+      updateLastMessage(chatId, text, newMsg.time);
+      dbSendMessage(chatId, user.id, text);
+    }
   };
 
   useEffect(() => {

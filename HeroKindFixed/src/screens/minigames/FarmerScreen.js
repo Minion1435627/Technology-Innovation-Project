@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   ScrollView,
@@ -11,7 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { mockUser } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 const ACTIONS = [
   { key: 'water', label: 'Water', icon: 'water-outline', color: '#6aa7c8' },
@@ -20,11 +21,11 @@ const ACTIONS = [
 ];
 
 const LEVEL_RULES = [
-  { level: 1, score: 0, name: 'Newcomer' },
-  { level: 2, score: 100, name: 'Helper' },
-  { level: 3, score: 180, name: 'Trusted Neighbour' },
-  { level: 4, score: 300, name: 'Community Pillar' },
-  { level: 5, score: 500, name: 'Legend' },
+  { level: 1, score: 0,    name: 'Newcomer' },
+  { level: 2, score: 100,  name: 'Helper' },
+  { level: 3, score: 200,  name: 'Trusted Neighbour' },
+  { level: 4, score: 500,  name: 'Community Pillar' },
+  { level: 5, score: 1000, name: 'Legend' },
 ];
 
 const SEED_PACKETS = [
@@ -90,18 +91,52 @@ const cropLabel = (plot) => {
 };
 
 export default function FarmerScreen({ navigation }) {
-  const playerLevel = mockUser.level;
-  const levelName = mockUser.levelName;
+  const { profile, patchProfile, fetchProfile, user } = useAuth();
+  const playerLevel = profile?.level ?? 1;
+  const levelName = LEVEL_RULES.find(r => r.level === playerLevel)?.name ?? 'Newcomer';
   const nextLevel = getNextLevelRule(playerLevel);
   const unlockedSeeds = SEED_PACKETS.filter(seed => seed.level <= playerLevel);
 
-  const [plots, setPlots] = useState(createInitialPlots);
-  const [coins, setCoins] = useState(36);
-  const [water, setWater] = useState(4);
+  const [plots, setPlots] = useState(() => profile?.farmer_state?.plots ?? createInitialPlots());
+  const [coins, setCoins] = useState(() => profile?.coins ?? 0);
+  const [water, setWater] = useState(() => profile?.farmer_state?.water ?? 4);
   const [basket, setBasket] = useState(0);
   const [message, setMessage] = useState('Choose a seed, then tap an empty plot to plant it.');
   const [selectedPlotId, setSelectedPlotId] = useState(1);
   const [selectedSeedKey, setSelectedSeedKey] = useState(unlockedSeeds[unlockedSeeds.length - 1].key);
+
+  const saveTimerRef = useRef(null);
+  const loadingFromDb = useRef(false);
+
+  // Re-fetch profile from DB every time this screen gains focus
+  useFocusEffect(useCallback(() => {
+    if (user?.id) fetchProfile(user.id);
+  }, [user?.id]));
+
+  // Re-sync game state when farmer_state is refreshed from DB (e.g. after SQL reset)
+  useEffect(() => {
+    loadingFromDb.current = true;
+    setPlots(profile?.farmer_state?.plots ?? createInitialPlots());
+    setWater(profile?.farmer_state?.water ?? 4);
+    const t = setTimeout(() => { loadingFromDb.current = false; }, 50);
+    return () => clearTimeout(t);
+  }, [profile?.farmer_state]);
+
+  // Sync coins separately — only on initial load, not on every coin change
+  useEffect(() => {
+    if (profile?.coins !== undefined) setCoins(profile.coins);
+  }, [profile?.farmer_state]);
+
+  // Auto-save on state changes (skip DB-driven updates)
+  const saveTimerRef2 = useRef(null);
+  useEffect(() => {
+    if (loadingFromDb.current) return;
+    clearTimeout(saveTimerRef2.current);
+    saveTimerRef2.current = setTimeout(() => {
+      patchProfile({ farmer_state: { plots, water } });
+    }, 800);
+    return () => clearTimeout(saveTimerRef2.current);
+  }, [plots, water]);
 
   const selectedPlot = plots.find(plot => plot.id === selectedPlotId) || plots[0];
   const selectedSeed = getSeed(selectedSeedKey);
@@ -126,12 +161,20 @@ export default function FarmerScreen({ navigation }) {
     setPlots(prev => prev.map(plot => (plot.id === nextPlot.id ? nextPlot : plot)));
   };
 
+  const changeCoins = (delta) => {
+    setCoins(prev => {
+      const next = prev + delta;
+      patchProfile({ coins: next });
+      return next;
+    });
+  };
+
   const plantSeedInPlot = (plot) => {
     if (coins < selectedSeed.cost) {
       setMessage(`${selectedSeed.name} seeds cost ${selectedSeed.cost} coins.`);
       return;
     }
-    setCoins(prev => prev - selectedSeed.cost);
+    changeCoins(-selectedSeed.cost);
     updatePlot({ ...plot, stage: 'seed', crop: selectedSeed.key });
     setSelectedPlotId(plot.id);
     setMessage(`${selectedSeed.name} planted in Plot ${plot.id} for ${selectedSeed.cost} coins.`);
@@ -185,7 +228,7 @@ export default function FarmerScreen({ navigation }) {
       setMessage('Harvest crops before selling.');
       return;
     }
-    setCoins(prev => prev + basket);
+    changeCoins(basket);
     setWater(prev => prev + Math.min(2, Math.ceil(basket / 20)));
     setBasket(0);
     setMessage('Sold your basket and restocked a little.');
@@ -200,7 +243,7 @@ export default function FarmerScreen({ navigation }) {
       setMessage(`Plot ${nextLockedPlot.id} costs ${nextPlotCost} coins.`);
       return;
     }
-    setCoins(prev => prev - nextPlotCost);
+    changeCoins(-nextPlotCost);
     updatePlot({ ...nextLockedPlot, stage: 'empty' });
     setSelectedPlotId(nextLockedPlot.id);
     setMessage(`Plot ${nextLockedPlot.id} unlocked. More room for crops.`);
@@ -211,7 +254,7 @@ export default function FarmerScreen({ navigation }) {
       setMessage(`${WATER_PACK_AMOUNT} water costs ${WATER_PACK_COST} coins.`);
       return;
     }
-    setCoins(prev => prev - WATER_PACK_COST);
+    changeCoins(-WATER_PACK_COST);
     setWater(prev => prev + WATER_PACK_AMOUNT);
     setMessage(`Bought ${WATER_PACK_AMOUNT} water for ${WATER_PACK_COST} coins.`);
   };
@@ -248,8 +291,8 @@ export default function FarmerScreen({ navigation }) {
             <Text style={styles.levelProgressTitle}>Level {playerLevel} · {levelName}</Text>
             <Text style={styles.levelProgressText}>
               {nextLevel
-                ? `${mockUser.xp}/${mockUser.xpNext} XP to unlock Level ${nextLevel.level} seeds`
-                : `${mockUser.xp} XP · all seed packets unlocked`}
+                ? `${profile?.xp ?? 0}/${nextLevel.score} XP to unlock Level ${nextLevel.level} seeds`
+                : `${profile?.xp ?? 0} XP · all seed packets unlocked`}
             </Text>
           </View>
           <Ionicons name="sparkles-outline" size={20} color="#b58935" />

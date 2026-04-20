@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
    ScrollView, KeyboardAvoidingView, Platform, Alert,
@@ -7,9 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { usePosts } from '../context/PostsContext';
 import { usePrivacy } from '../context/PrivacyContext';
-import { mockUser } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 
 const NEED_CATEGORIES = ['Borrow an item', 'Physical help', 'Food sharing', 'Study/skills', 'Custom'];
 const SUPPLY_CATEGORIES = ['Lend an item', 'Physical help', 'Share food', 'Offer skills', 'Custom'];
@@ -33,6 +34,19 @@ const URGENCY_COLOR = {
 export default function PostScreen({ navigation, route }) {
   const { addPost } = usePosts();
   const { locationSettings } = usePrivacy();
+  const { profile } = useAuth();
+  const currentUser = profile;
+  const [gpsCoords, setGpsCoords] = useState(route.params?.userLocation ?? null);
+
+  useEffect(() => {
+    if (gpsCoords) return;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setGpsCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    })();
+  }, []);
   const [postType, setPostType] = useState('need'); // 'need' | 'supply'
   const [form, setForm] = useState({
     title: '',
@@ -63,7 +77,7 @@ export default function PostScreen({ navigation, route }) {
       return;
     }
 
-    const coords = locationSettings.useLocationForMap ? (route.params?.userLocation ?? FALLBACK) : FALLBACK;
+    const coords = locationSettings.useLocationForMap ? (gpsCoords ?? FALLBACK) : FALLBACK;
 
     const newPost = {
       id: `post_${Date.now()}`,
@@ -75,12 +89,13 @@ export default function PostScreen({ navigation, route }) {
       category: form.category === 'Custom' ? form.customCategory || 'Custom' : form.category,
       urgency: postType === 'need' ? form.urgency : undefined,
       availability: postType === 'supply' ? form.availability : undefined,
+      user_id: currentUser?.id,
       poster: {
-        id: mockUser.id,
-        name: mockUser.name,
-        level: mockUser.level,
-        gender: mockUser.gender,
-        stars: mockUser.stars,
+        id: currentUser?.id,
+        name: currentUser?.name,
+        level: currentUser?.level,
+        gender: currentUser?.gender,
+        stars: currentUser?.stars,
       },
       timePosted: 'just now',
       expiresAt: Date.now() + (EXPIRY_MS[form.expiry] ?? EXPIRY_MS['7 days']),

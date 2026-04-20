@@ -12,16 +12,16 @@ const FAQ_DATA = [
     section: 'Getting Started',
     items: [
       {
-        q: 'What is HeroKind?',
-        a: 'HeroKind is a community platform where students and neighbours help each other with everyday micro-tasks — like lending a tool, sharing food, or offering a skill. Every act of kindness earns you XP and builds your reputation.',
+        q: 'What is HelpMate?',
+        a: 'HelpMate is a community platform where students and neighbours help each other with everyday micro-tasks — like lending a tool, sharing food, or offering a skill. Every act of kindness earns you XP and builds your reputation.',
       },
       {
         q: 'How do I post a Need or Supply?',
         a: 'Tap the ＋ button on the Map screen. Choose whether you\'re posting a Need (something you want help with) or a Supply (something you\'re offering). Fill in the details and your pin will appear on the map for nearby users.',
       },
       {
-        q: 'Is HeroKind free to use?',
-        a: 'Yes, HeroKind is completely free. No subscription, no hidden fees — just neighbours helping neighbours.',
+        q: 'Is HelpMate free to use?',
+        a: 'Yes, HelpMate is completely free. No subscription, no hidden fees — just neighbours helping neighbours.',
       },
     ],
   },
@@ -91,7 +91,7 @@ export default function FAQScreen({ navigation }) {
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
-          Find quick answers to the most common questions about HeroKind.
+          Find quick answers to the most common questions about HelpMate.
         </Text>
 
         {FAQ_DATA.map((section) => (
