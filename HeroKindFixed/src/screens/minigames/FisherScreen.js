@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -12,7 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { mockUser } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 const fisherImage = require('../../../assets/Fisher.png');
 
@@ -87,20 +88,50 @@ const pickWeighted = (items, getWeight) => {
 };
 
 export default function FisherScreen({ navigation }) {
-  const playerLevel = mockUser.level;
-  const levelName = mockUser.levelName;
+  const { profile, patchProfile, fetchProfile, user } = useAuth();
+  const playerLevel = profile?.level ?? 1;
+  const levelName = LEVEL_RULES.find(r => r.level === playerLevel)?.name ?? 'Newcomer';
+  const defaultCollection = FISH_SPECIES.reduce((acc, fish) => ({ ...acc, [fish.id]: 0 }), {});
   const [activeTab, setActiveTab] = useState('game');
-  const [coins, setCoins] = useState(48);
-  const [baitStock, setBaitStock] = useState({ worm: 5, shrimp: 2, fly: 1, minnow: 0 });
+  const [coins, setCoins] = useState(() => profile?.coins ?? 0);
+  const [baitStock, setBaitStock] = useState(() => profile?.fisher_state?.baitStock ?? { worm: 5, shrimp: 2, fly: 1, minnow: 0 });
   const [selectedBaitKey, setSelectedBaitKey] = useState('worm');
-  const [ownedRods, setOwnedRods] = useState(['twig']);
-  const [selectedRodKey, setSelectedRodKey] = useState('twig');
-  const [collection, setCollection] = useState(() => (
-    FISH_SPECIES.reduce((acc, fish) => ({ ...acc, [fish.id]: 0 }), {})
-  ));
-  const [fishBasket, setFishBasket] = useState(() => (
-    FISH_SPECIES.reduce((acc, fish) => ({ ...acc, [fish.id]: 0 }), {})
-  ));
+  const [ownedRods, setOwnedRods] = useState(() => profile?.fisher_state?.ownedRods ?? ['twig']);
+  const [selectedRodKey, setSelectedRodKey] = useState(() => profile?.fisher_state?.selectedRodKey ?? 'twig');
+  const [collection, setCollection] = useState(() => profile?.fisher_state?.collection ?? defaultCollection);
+  const [fishBasket, setFishBasket] = useState(() => profile?.fisher_state?.fishBasket ?? defaultCollection);
+
+  const loadingFromDb = useRef(false);
+  const saveTimerRef = useRef(null);
+
+  useFocusEffect(useCallback(() => {
+    if (user?.id) fetchProfile(user.id);
+  }, [user?.id]));
+
+  useEffect(() => {
+    loadingFromDb.current = true;
+    const fs = profile?.fisher_state;
+    setBaitStock(fs?.baitStock ?? { worm: 5, shrimp: 2, fly: 1, minnow: 0 });
+    setOwnedRods(fs?.ownedRods ?? ['twig']);
+    setSelectedRodKey(fs?.selectedRodKey ?? 'twig');
+    setCollection(fs?.collection ?? defaultCollection);
+    setFishBasket(fs?.fishBasket ?? defaultCollection);
+    const t = setTimeout(() => { loadingFromDb.current = false; }, 50);
+    return () => clearTimeout(t);
+  }, [profile?.fisher_state]);
+
+  useEffect(() => {
+    if (profile?.coins !== undefined) setCoins(profile.coins);
+  }, [profile?.fisher_state]);
+
+  useEffect(() => {
+    if (loadingFromDb.current) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      patchProfile({ fisher_state: { baitStock, ownedRods, selectedRodKey, collection, fishBasket } });
+    }, 800);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [baitStock, ownedRods, selectedRodKey, collection, fishBasket]);
   const [gameState, setGameState] = useState('idle');
   const [message, setMessage] = useState('Choose bait and cast into the lake.');
   const [caughtFish, setCaughtFish] = useState(null);
@@ -190,12 +221,20 @@ export default function FisherScreen({ navigation }) {
     setTimeout(() => setGameState('idle'), 3800);
   };
 
+  const changeCoins = (delta) => {
+    setCoins(prev => {
+      const next = prev + delta;
+      patchProfile({ coins: next });
+      return next;
+    });
+  };
+
   const buyBait = (bait) => {
     if (coins < bait.cost) {
       setMessage(`${bait.name} bait costs ${bait.cost} coins.`);
       return;
     }
-    setCoins(prev => prev - bait.cost);
+    changeCoins(-bait.cost);
     setBaitStock(prev => ({ ...prev, [bait.key]: (prev[bait.key] || 0) + bait.amount }));
     setSelectedBaitKey(bait.key);
     setMessage(`Bought ${bait.amount} ${bait.name} bait.`);
@@ -211,7 +250,7 @@ export default function FisherScreen({ navigation }) {
       setMessage(`${rod.name} costs ${rod.cost} coins.`);
       return;
     }
-    setCoins(prev => prev - rod.cost);
+    changeCoins(-rod.cost);
     setOwnedRods(prev => [...prev, rod.key]);
     setSelectedRodKey(rod.key);
     setMessage(`${rod.name} bought and equipped.`);
@@ -222,7 +261,7 @@ export default function FisherScreen({ navigation }) {
       setMessage('Catch fish before selling.');
       return;
     }
-    setCoins(prev => prev + basketValue);
+    changeCoins(basketValue);
     setFishBasket(FISH_SPECIES.reduce((acc, fish) => ({ ...acc, [fish.id]: 0 }), {}));
     setMessage(`Sold your fish basket for ${basketValue} coins. Collection book stays saved.`);
   };

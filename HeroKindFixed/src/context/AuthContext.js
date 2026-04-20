@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { fetchUserProfile } from '../lib/db';
+import { fetchUserProfile, updateUserProfile } from '../lib/db';
 
 const AuthContext = createContext(null);
 
@@ -32,12 +32,18 @@ export function AuthProvider({ children }) {
     setProfile(data);
   };
 
+  const patchProfile = async (fields) => {
+    if (!user?.id) return;
+    setProfile(prev => prev ? { ...prev, ...fields } : prev);
+    await updateUserProfile(user.id, fields);
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut, fetchProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signOut, fetchProfile, patchProfile }}>
       {children}
     </AuthContext.Provider>
   );
