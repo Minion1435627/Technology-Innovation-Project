@@ -96,6 +96,24 @@ export async function fetchUserReviews(userId) {
 
 // ─── Chats ────────────────────────────────────────────────────────────────────
 
+export async function createChat(user1Id, user2Id) {
+  // Return existing chat between these two users if one already exists
+  const { data: existing } = await supabase
+    .from('chats')
+    .select('id')
+    .or(`and(user1_id.eq.${user1Id},user2_id.eq.${user2Id}),and(user1_id.eq.${user2Id},user2_id.eq.${user1Id})`)
+    .maybeSingle();
+  if (existing) return existing;
+
+  const { data, error } = await supabase
+    .from('chats')
+    .insert({ user1_id: user1Id, user2_id: user2Id })
+    .select()
+    .single();
+  if (error) console.error('createChat:', error.message);
+  return data;
+}
+
 export async function fetchChats(userId) {
   const { data, error } = await supabase
     .from('chats')
@@ -106,10 +124,20 @@ export async function fetchChats(userId) {
   return data ?? [];
 }
 
+export async function fetchTransactionById(txId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select(`*, provider:provider_id(id, name, stars, level), requester:requester_id(id, name, stars, level)`)
+    .eq('id', txId)
+    .maybeSingle();
+  if (error) console.warn('fetchTransactionById:', error.message);
+  return data ?? null;
+}
+
 export async function fetchTransactionByChat(chatId) {
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, status, type, title, provider_id, requester_id, agreed_return_date')
+    .select('id, status, type, item, provider_id, requester_id, agreed_return_date')
     .eq('chat_id', chatId)
     .limit(1)
     .maybeSingle();
@@ -152,6 +180,16 @@ export async function fetchLeaderboard() {
     .limit(20);
   if (error) console.warn('fetchLeaderboard:', error.message);
   return data ?? [];
+}
+
+export async function createTransaction(tx) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert(tx)
+    .select()
+    .single();
+  if (error) console.error('createTransaction:', error.message);
+  return data;
 }
 
 export async function fetchTransactions(userId) {

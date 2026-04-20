@@ -13,6 +13,7 @@ import Avatar from '../components/Avatar';
 import UrgencyBadge from '../components/UrgencyBadge';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
+import { useChats } from '../context/ChatContext';
 import { usePrivacy } from '../context/PrivacyContext';
 import { mockUser, mockOtherUsers, mockChats } from '../data/mockData';
 
@@ -87,6 +88,7 @@ export default function MapScreen({ navigation }) {
   const mapRef  = useRef(null);
   const { posts, removePost } = usePosts();
   const { friendIds, addFriend, removeFriend, isFriend } = useFriends();
+  const { chats } = useChats();
   const { locationSettings } = usePrivacy();
   const { useLocationForMap } = locationSettings;
   const [userLocation, setUserLocation] = useState(null);
@@ -514,7 +516,7 @@ export default function MapScreen({ navigation }) {
                         style={styles.tooltipContactBtn}
                         onPress={() => {
                           setTooltip(null);
-                          const existingChat = mockChats.find(c => c.user.id === tooltip.poster.id);
+                          const existingChat = chats.find(c => c.user?.id === tooltip.poster.id);
                           navigation.navigate('ChatDetail', {
                             chat: existingChat ?? { user: tooltip.poster, postTitle: tooltip.title },
                           });

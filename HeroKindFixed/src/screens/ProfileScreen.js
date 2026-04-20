@@ -9,7 +9,7 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
 import { mockUser } from '../data/mockData';
-import { fetchUserReviews, fetchTransactions } from '../lib/db';
+import { fetchUserReviews, fetchTransactions, fetchLeaderboard } from '../lib/db';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
@@ -56,6 +56,7 @@ export default function ProfileScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('reviews');
   const [reviews, setReviews] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [weeklyRank, setWeeklyRank] = useState(null);
   const { posts, removePost } = usePosts();
   const { friends } = useFriends();
   const { chats } = useChats();
@@ -77,10 +78,14 @@ export default function ProfileScreen({ navigation }) {
     fetchTransactions(authUser.id).then(rows => {
       setTransactions(rows.map(t => ({
         ...t,
-        item: t.title ?? t.item ?? '',
+        item: t.item ?? '',
         agreedReturnDate: t.agreed_return_date ?? t.agreedReturnDate,
         myRole: t.provider_id === authUser.id ? 'provider' : 'requester',
       })));
+    });
+    fetchLeaderboard().then(rows => {
+      const idx = rows.findIndex(r => r.id === authUser.id);
+      if (idx !== -1) setWeeklyRank(idx + 1);
     });
   }, [authUser?.id]);
 
@@ -204,7 +209,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
             <Text style={styles.statEmoji}>🏆</Text>
-            <Text style={styles.statValue}>#{user.weekly_rank ?? '-'}</Text>
+            <Text style={styles.statValue}>#{weeklyRank ?? '-'}</Text>
             <Text style={styles.statLabel}>This week</Text>
           </View>
         </View>

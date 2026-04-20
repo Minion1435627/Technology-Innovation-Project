@@ -120,8 +120,9 @@ const STATUS_CONFIG = {
 };
 
 function getChatPriority(chat) {
-  const meta = EXCHANGE_META[chat.id];
-  const status = meta?.status ?? 'none';
+  const status = (chat.exchange ?? EXCHANGE_META[chat.id])?.state
+    ?? (chat.exchange ?? EXCHANGE_META[chat.id])?.status
+    ?? 'none';
   const base = STATUS_CONFIG[status]?.priority ?? 6;
 
   if (status === 'in_progress' && chat.unread > 0) return 3;
@@ -135,7 +136,7 @@ export default function ChatListScreen({ navigation }) {
     return [...chats]
       .map(chat => ({
         ...chat,
-        exchange: EXCHANGE_META[chat.id] ?? null,
+        exchange: chat.exchange ?? EXCHANGE_META[chat.id] ?? null,
         priority: getChatPriority(chat),
       }))
       .sort((a, b) => {
@@ -150,8 +151,9 @@ export default function ChatListScreen({ navigation }) {
 
   const renderChatRow = ({ item }) => {
     const exchange = item.exchange;
-    const status = STATUS_CONFIG[exchange?.status ?? 'none'];
-    const isUrgent = exchange?.status === 'overdue' || exchange?.status === 'due_soon';
+    const exchangeState = exchange?.state ?? exchange?.status ?? 'none';
+    const status = STATUS_CONFIG[exchangeState] ?? STATUS_CONFIG.none;
+    const isUrgent = exchangeState === 'overdue' || exchangeState === 'due_soon';
 
     return (
       <TouchableOpacity
@@ -195,11 +197,11 @@ export default function ChatListScreen({ navigation }) {
 
           {exchange ? (
             <View style={styles.exchangeSummary}>
-              <Text style={[styles.countdownText, exchange.status === 'overdue' && styles.countdownTextOverdue]}>
-                {exchange.countdownText}
+              <Text style={[styles.countdownText, exchangeState === 'overdue' && styles.countdownTextOverdue]}>
+                {exchange.countdownText ?? exchange.summaryText ?? ''}
               </Text>
               <Text style={styles.helperText} numberOfLines={1}>
-                {exchange.helperText}
+                {exchange.helperText ?? exchange.summaryText ?? ''}
               </Text>
             </View>
           ) : (

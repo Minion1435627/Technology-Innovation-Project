@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { fetchChats, fetchTransactionByChat } from '../lib/db';
+import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
 const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', overdue: 'Overdue', disputed: 'Disputed' };
@@ -9,6 +10,7 @@ function mapTxToExchange(tx, userId) {
   const txType = tx.type ?? 'borrow';
   const state = tx.status ?? 'pending';
   return {
+    transactionId: tx.id,
     state,
     type: txType,
     myRole,
@@ -17,7 +19,7 @@ function mapTxToExchange(tx, userId) {
     countdownText: tx.agreed_return_date
       ? `Return: ${new Date(tx.agreed_return_date).toLocaleDateString()}`
       : '',
-    summaryText: tx.title ?? '',
+    summaryText: tx.item ?? '',
     actionLabel: 'View Exchange',
   };
 }
@@ -56,6 +58,29 @@ export function ChatProvider({ children }) {
     });
   }, [user?.id]);
 
+  // Refresh exchange status when a transaction is inserted or updated
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel('transactions_watch')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'HelpMate',
+        table: 'transactions',
+      }, ({ new: tx }) => {
+        if (!tx?.chat_id) return;
+        fetchTransactionByChat(tx.chat_id).then(fresh => {
+          setChats(prev => prev.map(c =>
+            c.id === tx.chat_id
+              ? { ...c, exchange: fresh ? mapTxToExchange(fresh, user.id) : null }
+              : c
+          ));
+        });
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user?.id]);
+
   const addChat = (newChat) => {
     setChats(prev => {
       if (prev.some(c => c.user?.id === newChat.user?.id)) return prev;
@@ -69,8 +94,18 @@ export function ChatProvider({ children }) {
     );
   };
 
+  const refreshChatExchange = async (chatId) => {
+    if (!user?.id || !chatId) return;
+    const tx = await fetchTransactionByChat(chatId);
+    setChats(prev => prev.map(c =>
+      c.id === chatId
+        ? { ...c, exchange: tx ? mapTxToExchange(tx, user.id) : null }
+        : c
+    ));
+  };
+
   return (
-    <ChatContext.Provider value={{ chats, addChat, updateLastMessage }}>
+    <ChatContext.Provider value={{ chats, addChat, updateLastMessage, refreshChatExchange }}>
       {children}
     </ChatContext.Provider>
   );
