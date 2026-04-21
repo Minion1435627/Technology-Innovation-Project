@@ -4,7 +4,7 @@ Meeting for 21_04
 3. Assign the task for the presentation
 4. Discuss next step
 
-Introduction
+Introduction (Bella)
 Introduce your team and role/responsibilities (R&R)
 Briefly introduce the topic you are investigating. What is the problem and why is it important? 
 What were your initial expectations about the problem?
@@ -12,7 +12,7 @@ What innovation did you initially think was needed to address this problem?
 
 
 
-Your investigation
+Your investigation (Tammy)
 Provide an overview of the investigation methods you have used so far. 
 How many interviews have you conducted? Who have you interviewed?
 How have you analysed the data (e.g., coding, affinity mapping, thematic analysis)?
@@ -22,13 +22,13 @@ Needs analysis: What needs have you identified so far? Summarise your key needs 
 
 
 
-Findings
+Findings (Bella)
 Provide a summary of the key findings to date, including any highlights from interviews conducted with end users/stakeholders. 
 Clearly connect your findings to the needs you identified (i.e., evidence → need → insight).
 
 
 
-Personas
+Personas (Leo)
 What have you learned about your intended users from your investigation?
 Present 2 or 3 personas to bring your intended users and/or stakeholders to life. Include their goals and concerns.  
 Make sure each persona is linked to specific user needs (and evidence).
@@ -36,14 +36,14 @@ Make sure each persona is linked to specific user needs (and evidence).
 -> Personas and Scenarios (Worshop 6)
 
 
-Value Proposition & Innovation Hypothesis 
+Value Proposition & Innovation Hypothesis  (Anita)
 Present your current Value Proposition, clearly stating who it is for (target persona/customer segment) and the key Customer Jobs, Pains, and Gains you aim to address.
 Where relevant, include a brief snapshot of your Value Proposition Canvas (Customer Profile → Value Map).
 Present 1–2 key Innovation Hypotheses as testable statements that link your identified Jobs/Pains/Gains to your proposed value, and outline how you will validate them in the next stage.
 
 -> Create Innovation Hypotheses (Workshop 5)
 
-Next steps
+Next steps (Anita)
 Provide an outline of plans for the next stage of your project, including: 
 What are the requirements you have identified so far for your design ideas (i.e., what will your product need to do and/or how will it need to behave)?
 What are the key performance indicators you will use to evaluate your design ideas? 
