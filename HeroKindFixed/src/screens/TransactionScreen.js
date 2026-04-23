@@ -8,8 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { submitReview as dbSubmitReview } from '../lib/db';
 import { useAuth } from '../context/AuthContext';
+import { createReview, deletePendingTransactionsByChat, deleteTransaction, updateTransaction } from '../lib/db';
 
 const REVIEW_TAG_OPTIONS = ['Friendly', 'On time', 'Clear communication', 'Reliable', 'Helpful'];
 
@@ -76,9 +76,10 @@ function Countdown({ targetDate }) {
 }
 
 export default function TransactionScreen({ navigation, route }) {
-  const { user: authUser, profile } = useAuth();
   const { transaction: initial } = route.params;
   const focusReviewPrompt = route?.params?.focusReviewPrompt;
+  const fromChat = route?.params?.fromChat ?? false;
+  const { user } = useAuth();
   const [tx, setTx] = useState(initial);
   const [reviewPromptVisible, setReviewPromptVisible] = useState(initial.status === 'completed');
   const [selectedReviewTags, setSelectedReviewTags] = useState([]);
@@ -90,15 +91,20 @@ export default function TransactionScreen({ navigation, route }) {
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const scrollRef = useRef(null);
   const reviewPromptYRef = useRef(0);
-  const reviewTargetUser = tx.provider.id === authUser?.id ? tx.requester : tx.provider;
+  const currentUserId = user?.id ?? (tx.myRole === 'provider' ? tx.provider.id : tx.requester.id);
+  const reviewTargetUser = tx.provider.id === currentUserId ? tx.requester : tx.provider;
 
   const isProvider = tx.myRole === 'provider';
   const isRequester = tx.myRole === 'requester';
   const isBorrow = tx.type === 'borrow';
   const canAcceptExchange = tx.status === 'pending' && tx.pendingBy && tx.pendingBy !== tx.myRole;
+  const currentUserSentStart = tx.status === 'pending' && tx.pendingBy === tx.myRole;
+  const otherParty = isProvider ? tx.requester : tx.provider;
   const flowLabel = isBorrow ? 'Borrowed item' : 'Help / service';
   const assetLabel = isBorrow ? 'ITEM' : 'TASK';
-  const startEventLabel = 'Accepted at';
+  const startEventLabel = tx.status === 'pending'
+    ? (currentUserSentStart ? 'Start request sent' : 'Start request received')
+    : 'Accepted at';
   const deadlineLabel = isBorrow ? 'Return deadline' : 'Task window ends';
   const countdownLabel = isBorrow ? 'Time left' : 'Time remaining';
   const acceptActionLabel = 'Accept Exchange';
@@ -113,8 +119,12 @@ export default function TransactionScreen({ navigation, route }) {
     : tx.status === 'disputed'
       ? 'Issue under review'
       : tx.status === 'pending'
-        ? 'Waiting for the other side to accept the start request'
-        : 'The exchange is active until the supplier marks it completed';
+        ? (currentUserSentStart
+          ? `Start request sent. Waiting for ${otherParty.name} to accept`
+          : `${otherParty.name} sent a start request`)
+        : (isProvider
+          ? `Exchange in progress. You can complete it when "${tx.item}" is done`
+          : `Exchange in progress. Waiting for ${tx.provider.name} to complete it`);
   const timelinePastColor = colors.primary;
   const timelineCurrentColor = colors.success;
   const acceptedDotColor = tx.status === 'pending' ? timelineCurrentColor : timelinePastColor;
@@ -127,23 +137,57 @@ export default function TransactionScreen({ navigation, route }) {
   const acceptExchange = () => {
     const title = 'Accept Exchange';
     const message = isBorrow
-      ? `Accept this borrowed-item start request for "${tx.item}"? The exchange will move into progress immediately.`
-      : `Accept this help-task start request for "${tx.item}"? The exchange will move into progress immediately.`;
+      ? `Accept this start request for "${tx.item}"? The exchange will move into progress immediately, and only the provider can complete it later.`
+      : `Accept this start request for "${tx.item}"? The exchange will move into progress immediately, and only the provider can complete it later.`;
 
     Alert.alert(title, message, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: acceptActionLabel,
         onPress: () => {
+          const nextFields = {
+            status: 'in_progress',
+            pending_by_user_id: null,
+            handover_date: new Date().toISOString(),
+            agreed_return_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+          };
           setTx(t => ({
             ...t,
             status: 'in_progress',
-            handoverDate: new Date().toISOString(),
-            agreedReturnDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+            pendingBy: null,
+            handoverDate: nextFields.handover_date,
+            agreedReturnDate: nextFields.agreed_return_date,
           }));
+          if (tx.id) updateTransaction(tx.id, nextFields);
         },
       },
     ]);
+  };
+
+  const withdrawPendingExchange = () => {
+    if (!tx.id || tx.status !== 'pending' || !currentUserSentStart) return;
+
+    Alert.alert(
+      'Withdraw Start Request',
+      'This will cancel the current pending request so you can send a new start request later.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'destructive',
+          onPress: async () => {
+            const removed = tx.chatId && user?.id
+              ? await deletePendingTransactionsByChat(tx.chatId, user.id)
+              : await deleteTransaction(tx.id);
+            if (!removed) {
+              Alert.alert('Unable to withdraw', 'The pending request could not be removed. Please check the database policy and try again.');
+              return;
+            }
+            navigation.goBack();
+          },
+        },
+      ]
+    );
   };
 
   const confirmCompletion = () => {
@@ -151,7 +195,9 @@ export default function TransactionScreen({ navigation, route }) {
   };
 
   const handleConfirmCompletion = () => {
-    setTx(t => ({ ...t, status: 'completed', completedDate: new Date().toISOString() }));
+    const completedAt = new Date().toISOString();
+    setTx(t => ({ ...t, status: 'completed', completedDate: completedAt }));
+    if (tx.id) updateTransaction(tx.id, { status: 'completed', completed_date: completedAt });
     setReviewPromptVisible(true);
     setCompleteConfirmOpen(false);
   };
@@ -185,17 +231,24 @@ export default function TransactionScreen({ navigation, route }) {
       Alert.alert('Add a rating', 'Please select a star rating before submitting your review.');
       return;
     }
+
     const reviewedUserId = reviewTargetUser.id;
-    const review = await dbSubmitReview({
-      reviewerId: authUser?.id,
+    const createdReview = await createReview({
+      transactionId: tx.id,
+      reviewerId: currentUserId,
       revieweeId: reviewedUserId,
-      transactionId: tx.transactionId ?? tx.id ?? null,
       stars: reviewRating,
       comment: reviewComment,
-      tags: selectedReviewTags,
+      tagLabels: selectedReviewTags,
     });
+
+    if (!createdReview?.id) {
+      Alert.alert('Unable to submit review', 'Your review could not be saved. Please try again.');
+      return;
+    }
+
     setSubmittedReviewUserId(reviewedUserId);
-    setSubmittedReviewId(review?.id ?? null);
+    setSubmittedReviewId(createdReview.id);
     setReviewSubmitted(true);
     setReviewPromptVisible(false);
     Alert.alert('Review submitted', 'Your feedback has been saved and will now appear on the user profile.');
@@ -258,13 +311,15 @@ export default function TransactionScreen({ navigation, route }) {
             </View>
             <TouchableOpacity
               style={styles.stickyChatBtn}
-              onPress={() =>
-                navigation.navigate('ChatDetail', {
-                  chat: {
-                    user: isProvider ? tx.requester : tx.provider,
-                    postTitle: tx.postTitle,
-                  },
-                })
+              onPress={() => fromChat
+                ? navigation.goBack()
+                : navigation.navigate('ChatDetail', {
+                    chat: {
+                      id: tx.chatId,
+                      user: isProvider ? tx.requester : tx.provider,
+                      postTitle: tx.postTitle,
+                    },
+                  })
               }
             >
               <Text style={styles.stickyChatBtnText}>Chat</Text>
@@ -403,8 +458,8 @@ export default function TransactionScreen({ navigation, route }) {
             <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
             <Text style={styles.infoText}>
               {isBorrow
-                ? 'This borrowed-item exchange is now active. The supplier will complete it after the return is confirmed.'
-                : 'This help task is now in progress. The countdown will keep running until the supplier marks the task completed.'}
+                ? 'This exchange is now in progress. Only the provider can complete it after the item has been returned.'
+                : 'This task is now in progress. Only the provider can complete it after the task has been finished.'}
             </Text>
           </View>
         )}
@@ -541,9 +596,18 @@ export default function TransactionScreen({ navigation, route }) {
             <View style={styles.reminderBox}>
               <Ionicons name="time-outline" size={18} color={colors.warning} />
               <Text style={styles.reminderText}>
-                A start request has been sent. This exchange will stay pending until the other side accepts it.
+                {currentUserSentStart
+                  ? `You sent the start request. This exchange will stay pending until ${otherParty.name} accepts it.`
+                  : 'This exchange is pending. Wait for the other side to accept or refresh the chat if the status changes.'}
               </Text>
             </View>
+          )}
+
+          {tx.status === 'pending' && currentUserSentStart && (
+            <TouchableOpacity style={styles.disputeBtn} onPress={withdrawPendingExchange}>
+              <Ionicons name="close-circle-outline" size={18} color={colors.error} />
+              <Text style={styles.disputeBtnText}>Withdraw Pending</Text>
+            </TouchableOpacity>
           )}
 
           {isProvider && (tx.status === 'in_progress' || tx.status === 'overdue') && (
@@ -558,8 +622,8 @@ export default function TransactionScreen({ navigation, route }) {
               <Ionicons name="alarm-outline" size={18} color={colors.warning} />
               <Text style={styles.reminderText}>
                 {isBorrow
-                  ? `Stay in touch with ${tx.provider.name} while "${tx.item}" is active. The supplier will complete the exchange after return.`
-                  : `Stay in touch with ${tx.provider.name} while "${tx.item}" is in progress. The supplier will mark the task completed when it is done.`}
+                  ? `Stay in touch with ${tx.provider.name} while "${tx.item}" is active. Only the provider can complete the exchange after the item is returned.`
+                  : `Stay in touch with ${tx.provider.name} while "${tx.item}" is in progress. Only the provider can mark the task completed when it is done.`}
               </Text>
             </View>
           )}
@@ -589,13 +653,15 @@ export default function TransactionScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={styles.chatBtn}
-            onPress={() =>
-              navigation.navigate('ChatDetail', {
-                chat: {
-                  user: isProvider ? tx.requester : tx.provider,
-                  postTitle: tx.postTitle,
-                },
-              })
+            onPress={() => fromChat
+              ? navigation.goBack()
+              : navigation.navigate('ChatDetail', {
+                  chat: {
+                    id: tx.chatId,
+                    user: isProvider ? tx.requester : tx.provider,
+                    postTitle: tx.postTitle,
+                  },
+                })
             }
           >
             <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />

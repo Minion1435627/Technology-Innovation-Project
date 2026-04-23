@@ -62,9 +62,8 @@ export default function SettingsScreen({ navigation }) {
         {/* ---------- Account ---------- */}
         <SectionHeader icon="👤" title="Account" />
         <Card>
-          <Row icon="create-outline"      label="Edit Profile"          onPress={() => todo('Edit Profile')} />
-          <Row icon="image-outline"       label="Change Avatar"         onPress={() => todo('Change Avatar')} />
-          <Row icon="document-text-outline" label="Name, Bio, Location" onPress={() => todo('Name, Bio, Location')} last />
+          <Row icon="create-outline"      label="Edit Profile"          onPress={() => navigation.navigate('EditProfile')} />
+          <Row icon="image-outline"       label="Change Avatar"         onPress={() => todo('Change Avatar')} last />
         </Card>
 
         {/* ---------- Verification ---------- */}
@@ -109,20 +108,13 @@ export default function SettingsScreen({ navigation }) {
           <ToggleRow icon="trophy-outline"      label="XP & rewards"     value={notifXP}        onValueChange={setNotifXP} last />
         </Card>
 
-        {/* ---------- Preferences ---------- */}
-        <SectionHeader icon="⚙️" title="Preferences" />
-        <Card>
-          <ToggleRow icon="moon-outline"   label="Dark Mode" value={darkMode} onValueChange={setDarkMode} />
-          <Row icon="language-outline"     label="Language"     value="English" onPress={() => todo('Language')} />
-          <Row icon="phone-portrait-outline" label="App Settings" onPress={() => Linking.openSettings()} last />
-        </Card>
-
         {/* ---------- Help & Support ---------- */}
         <SectionHeader icon="❓" title="Help & Support" />
         <Card>
-          <Row icon="help-circle-outline"   label="FAQ"                  onPress={() => navigation.navigate('FAQ')} />
-          <Row icon="mail-outline"          label="Contact Support"      onPress={() => navigation.navigate('ContactSupport')} />
-          <Row icon="book-outline"          label="Community Guidelines" onPress={() => navigation.navigate('CommunityGuidelines')} last />
+          <Row icon="help-circle-outline"     label="FAQ"                  onPress={() => navigation.navigate('FAQ')} />
+          <Row icon="mail-outline"            label="Contact Support"      onPress={() => navigation.navigate('ContactSupport')} />
+          <Row icon="book-outline"            label="Community Guidelines" onPress={() => navigation.navigate('CommunityGuidelines')} />
+          <Row icon="phone-portrait-outline"  label="App Settings"         onPress={() => Linking.openSettings()} last />
         </Card>
 
         {/* ---------- Account Actions ---------- */}

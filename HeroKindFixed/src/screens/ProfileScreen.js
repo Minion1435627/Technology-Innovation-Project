@@ -149,6 +149,20 @@ export default function ProfileScreen({ navigation }) {
     ? `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${computedLevel + 1}`
     : 'You have reached the highest level!';
 
+  const openOwnPostDetail = (post) => {
+    navigation.navigate('PostDetail', {
+      post: {
+        ...post,
+        typeLabel: post.type === 'need' ? 'Need' : post.type === 'supply' ? 'Supply' : 'Post',
+        ownerName: user.name,
+        ownerId: user.id,
+        ownerStars: user.stars,
+        ownerGender: user.gender,
+        exchangeSummary: 'Manage this post, review responses, or continue the exchange flow from chat.',
+      },
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
@@ -160,13 +174,6 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.topActions}>
           <Text style={styles.pageTitle}>Profile</Text>
           <View style={styles.topRight}>
-            <TouchableOpacity
-              style={styles.topPillBtn}
-              onPress={() => navigation.navigate('Leaderboard')}
-            >
-              <Ionicons name="trophy" size={14} color={colors.primary} />
-              <Text style={styles.topPillText}>Leaderboard</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconBtn}
               onPress={() => navigation.navigate('Settings')}
@@ -202,7 +209,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnPrimary]}
-              onPress={() => Alert.alert('Edit Profile', 'Edit profile coming soon.')}
+              onPress={() => navigation.navigate('EditProfile')}
             >
               <Ionicons name="create-outline" size={15} color={colors.textWhite} />
               <Text style={styles.actionBtnPrimaryText}>Edit Profile</Text>
@@ -219,23 +226,29 @@ export default function ProfileScreen({ navigation }) {
 
         {/* ---------- Stats strip ---------- */}
         <View style={styles.statsStrip}>
-          <View style={styles.statBox}>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.7}>
             <Text style={styles.statEmoji}>⭐</Text>
             <Text style={styles.statValue}>{computedRating.toFixed(1)}</Text>
             <Text style={styles.statLabel}>Rating</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.statDivider} />
-          <View style={styles.statBox}>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.7}>
             <Text style={styles.statEmoji}>🧾</Text>
             <Text style={styles.statValue}>{reviews.length}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.statDivider} />
-          <View style={styles.statBox}>
+          <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('Leaderboard')} activeOpacity={0.7}>
             <Text style={styles.statEmoji}>🏆</Text>
             <Text style={styles.statValue}>#{weeklyRank ?? '-'}</Text>
             <Text style={styles.statLabel}>This week</Text>
-          </View>
+          </TouchableOpacity>
+          <View style={styles.statDivider} />
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('friends')} activeOpacity={0.7}>
+            <Text style={styles.statEmoji}>🤝</Text>
+            <Text style={styles.statValue}>{friends.length}</Text>
+            <Text style={styles.statLabel}>Friends</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ---------- Level card ---------- */}
@@ -258,32 +271,30 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.levelTip}>
             <Text style={styles.levelTipText}>💡 {xpHint}</Text>
           </View>
-        </View>
-
-        {/* ---------- Quick Actions ---------- */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickGrid}>
-            {QUICK_ACTIONS.map(q => (
-              <TouchableOpacity key={q.id} style={styles.quickCard} onPress={q.onPress}>
-                <View style={[styles.quickIconWrap, { backgroundColor: q.color + '22' }]}>
-                  <Ionicons name={q.icon} size={20} color={q.color} />
-                </View>
-                <Text style={styles.quickLabel}>{q.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TouchableOpacity
+            style={styles.tasksBtn}
+            onPress={() => navigation.navigate('Tasks')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="flash-outline" size={14} color={colors.primaryDark} />
+            <Text style={styles.tasksBtnText}>View Daily & Weekly Tasks</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} />
+          </TouchableOpacity>
         </View>
 
         {/* ---------- Active Exchanges ---------- */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Exchanges</Text>
-            {activeExchanges.length > 0 && (
-              <TouchableOpacity onPress={() => Alert.alert('All exchanges', 'All-exchanges screen coming soon.')}>
-                <Text style={styles.viewAllLink}>View all</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={() => Alert.alert(
+                'Exchange History',
+                `You have completed ${completedExchanges.length} exchange${completedExchanges.length === 1 ? '' : 's'} so far.`
+              )}
+            >
+              <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           {activeExchanges.length === 0 ? (
@@ -318,31 +329,18 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         {/* ---------- Achievements ---------- */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Achievements</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {[
-              ...unlockedKeys.map(k => ACHIEVEMENT_DEFS.find(d => d.key === k)).filter(Boolean),
-              ...ACHIEVEMENT_DEFS.filter(d => !unlockedKeys.includes(d.key)),
-            ].map(a => {
-              const unlocked = unlockedKeys.includes(a.key);
-              return (
-                <View
-                  key={a.key}
-                  style={[styles.achieveCard, !unlocked && styles.achieveCardLocked]}
-                >
-                  <Text style={[styles.achieveEmoji, !unlocked && { opacity: 0.4 }]}>
-                    {unlocked ? a.emoji : '🔒'}
-                  </Text>
-                  <Text style={[styles.achieveLabel, !unlocked && styles.achieveLabelLocked]}>
-                    {a.label}
-                  </Text>
-                  <Text style={styles.achieveDesc}>{a.desc}</Text>
+        {unlockedKeys.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Achievements</Text>
+            <View style={styles.achieveTagRow}>
+              {ACHIEVEMENT_DEFS.filter(a => unlockedKeys.includes(a.key)).map(a => (
+                <View key={a.key} style={styles.achieveTag}>
+                  <Text style={styles.achieveTagText}>{a.emoji} #{a.label}</Text>
                 </View>
-              );
-            })}
-          </ScrollView>
-        </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* ---------- Tabs ---------- */}
         <View
@@ -408,7 +406,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.emptySub}>Tap + REQUEST HELP on the map to post one.</Text>
             </View>
           ) : myNeeds.map(item => (
-            <View key={item.id} style={styles.historyCard}>
+            <TouchableOpacity key={item.id} style={styles.historyCard} activeOpacity={0.88} onPress={() => openOwnPostDetail(item)}>
               <View style={[styles.historyDot, { backgroundColor: colors.need }]} />
               <View style={styles.historyBody}>
                 <Text style={styles.historyTitle}>{item.title}</Text>
@@ -420,7 +418,7 @@ export default function ProfileScreen({ navigation }) {
               <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                 <Ionicons name="trash-outline" size={16} color={colors.error} />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -432,7 +430,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.emptySub}>Tap + REQUEST HELP on the map to offer something.</Text>
             </View>
           ) : mySupplies.map(item => (
-            <View key={item.id} style={styles.historyCard}>
+            <TouchableOpacity key={item.id} style={styles.historyCard} activeOpacity={0.88} onPress={() => openOwnPostDetail(item)}>
               <View style={[styles.historyDot, { backgroundColor: colors.supply }]} />
               <View style={styles.historyBody}>
                 <Text style={styles.historyTitle}>{item.title}</Text>
@@ -444,7 +442,7 @@ export default function ProfileScreen({ navigation }) {
               <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                 <Ionicons name="trash-outline" size={16} color={colors.error} />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -590,6 +588,12 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 4 },
   levelTip: { backgroundColor: colors.primaryLight, borderRadius: 10, padding: 10 },
   levelTipText: { ...typography.small, color: colors.primary },
+  tasksBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 4, paddingVertical: 10, borderRadius: 10,
+    backgroundColor: colors.primaryLight,
+  },
+  tasksBtnText: { ...typography.small, color: colors.primaryDark, fontWeight: '600' },
 
   /* Sections */
   section: { paddingHorizontal: 16, marginTop: 18 },
@@ -599,6 +603,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: 10 },
   viewAllLink: { ...typography.smallBold, color: colors.primary, marginBottom: 10 },
+  historyBtn: { padding: 4 },
 
   /* Quick actions */
   quickGrid: { flexDirection: 'row', gap: 10 },
@@ -637,23 +642,14 @@ const styles = StyleSheet.create({
   emptyMiniText: { ...typography.small, color: colors.textMuted },
 
   /* Achievements */
-  achieveCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16, padding: 14,
-    marginRight: 10, alignItems: 'center',
-    width: 110, gap: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  achieveTagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  achieveTag: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  achieveCardLocked: {
-    backgroundColor: colors.background,
-    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
-    shadowOpacity: 0,
-  },
-  achieveEmoji: { fontSize: 28 },
-  achieveLabel: { ...typography.smallBold, color: colors.textPrimary, textAlign: 'center' },
-  achieveLabelLocked: { color: colors.textMuted },
-  achieveDesc: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
+  achieveTagText: { ...typography.small, color: colors.primaryDark, fontWeight: '600' },
 
   /* Tabs */
   tabBar: {

@@ -42,9 +42,6 @@ export default function LeaderboardScreen({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Leaderboard</Text>
         <View style={styles.weekBadge}>
           <Text style={styles.weekText}>This week</Text>
