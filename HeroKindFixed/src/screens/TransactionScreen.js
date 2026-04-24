@@ -9,7 +9,7 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
-import { createReview, deletePendingTransactionsByChat, deleteTransaction, updateTransaction } from '../lib/db';
+import { createReview, deletePendingTransactionById, deletePendingTransactionsByChat, deleteTransaction, updateTransaction } from '../lib/db';
 
 const REVIEW_TAG_OPTIONS = ['Friendly', 'On time', 'Clear communication', 'Reliable', 'Helpful'];
 
@@ -176,11 +176,24 @@ export default function TransactionScreen({ navigation, route }) {
           text: 'Withdraw',
           style: 'destructive',
           onPress: async () => {
-            const removed = tx.chatId && user?.id
-              ? await deletePendingTransactionsByChat(tx.chatId, user.id)
-              : await deleteTransaction(tx.id);
+            const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+            let removed = false;
+
+            if (isUuid(tx.id)) {
+              // Most reliable: delete directly by transaction ID
+              removed = await deletePendingTransactionById(tx.id);
+            }
+            if (!removed && isUuid(tx.chatId) && user?.id) {
+              // Fallback: delete by chat + user
+              removed = await deletePendingTransactionsByChat(tx.chatId, user.id);
+            }
+            if (!removed && isUuid(tx.id)) {
+              // Last resort: delete without pending_by filter
+              removed = await deleteTransaction(tx.id);
+            }
+
             if (!removed) {
-              Alert.alert('Unable to withdraw', 'The pending request could not be removed. Please check the database policy and try again.');
+              Alert.alert('Unable to withdraw', 'The pending request could not be removed. Please try again.');
               return;
             }
             navigation.goBack();

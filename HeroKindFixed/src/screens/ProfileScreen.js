@@ -226,28 +226,29 @@ export default function ProfileScreen({ navigation }) {
 
         {/* ---------- Stats strip ---------- */}
         <View style={styles.statsStrip}>
-          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.75}>
             <Text style={styles.statEmoji}>⭐</Text>
             <Text style={styles.statValue}>{computedRating.toFixed(1)}</Text>
             <Text style={styles.statLabel}>Rating</Text>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
           </TouchableOpacity>
-          <View style={styles.statDivider} />
-          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.75}>
             <Text style={styles.statEmoji}>🧾</Text>
             <Text style={styles.statValue}>{reviews.length}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
           </TouchableOpacity>
-          <View style={styles.statDivider} />
-          <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('Leaderboard')} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('Leaderboard')} activeOpacity={0.75}>
             <Text style={styles.statEmoji}>🏆</Text>
             <Text style={styles.statValue}>#{weeklyRank ?? '-'}</Text>
             <Text style={styles.statLabel}>This week</Text>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
           </TouchableOpacity>
-          <View style={styles.statDivider} />
-          <TouchableOpacity style={styles.statBox} onPress={() => goTab('friends')} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('friends')} activeOpacity={0.75}>
             <Text style={styles.statEmoji}>🤝</Text>
             <Text style={styles.statValue}>{friends.length}</Text>
             <Text style={styles.statLabel}>Friends</Text>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
           </TouchableOpacity>
         </View>
 
@@ -555,17 +556,22 @@ const styles = StyleSheet.create({
 
   /* Stats strip */
   statsStrip: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.card,
+    flexDirection: 'row',
     marginHorizontal: 16, marginTop: 14,
-    borderRadius: 18, paddingVertical: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+    gap: 8,
   },
-  statBox: { flex: 1, alignItems: 'center', gap: 2 },
-  statEmoji: { fontSize: 18 },
-  statValue: { ...typography.h4, color: colors.textPrimary },
-  statLabel: { ...typography.caption, color: colors.textMuted },
+  statBox: {
+    flex: 1, alignItems: 'center', gap: 3,
+    backgroundColor: colors.card,
+    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 4,
+    borderWidth: 1, borderColor: colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
+  },
+  statEmoji:   { fontSize: 18 },
+  statValue:   { ...typography.h4, color: colors.textPrimary },
+  statLabel:   { ...typography.caption, color: colors.textMuted },
+  statChevron: { marginTop: 2 },
   statDivider: { width: 1, height: 36, backgroundColor: colors.border },
 
   /* Level card */

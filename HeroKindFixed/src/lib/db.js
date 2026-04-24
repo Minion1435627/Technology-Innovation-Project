@@ -84,11 +84,13 @@ export async function removeFriend(userId, friendId) {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
+const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export async function createReview({ transactionId, reviewerId, revieweeId, stars, comment, tagLabels = [] }) {
   const { data: review, error } = await supabase
     .from('reviews')
     .insert({
-      transaction_id: transactionId,
+      transaction_id: isUuid(transactionId) ? transactionId : null,
       reviewer_id: reviewerId,
       reviewee_id: revieweeId,
       stars,
