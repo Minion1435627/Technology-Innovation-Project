@@ -20,6 +20,22 @@ function authHeaders() {
   return { Authorization: `Bearer ${API_KEY}` };
 }
 
+function extractFileUrl(fileLike) {
+  if (!fileLike) return null;
+  if (typeof fileLike === 'string') return fileLike;
+  return fileLike.url ?? null;
+}
+
+function extractModelUrl(output) {
+  return (
+    extractFileUrl(output?.pbr_model) ??
+    extractFileUrl(output?.model_mesh) ??
+    extractFileUrl(output?.model) ??
+    extractFileUrl(output?.base_model) ??
+    null
+  );
+}
+
 async function parseResponse(response) {
   const json = await response.json();
   if (!response.ok || json.code !== 0) {
@@ -62,13 +78,17 @@ export async function uploadImage(imageUri) {
  * @returns {Promise<string>} task_id
  */
 export async function createImageTo3DTask(imageToken, fileType = 'jpg') {
+  return createTask({
+    type: 'image_to_model',
+    file: { type: fileType, file_token: imageToken },
+  });
+}
+
+async function createTask(payload) {
   const response = await fetch(`${BASE_URL}/task`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'image_to_model',
-      file: { type: fileType, file_token: imageToken },
-    }),
+    body: JSON.stringify(payload),
   });
 
   const data = await parseResponse(response);
@@ -124,13 +144,8 @@ export function waitForCompletion(taskId, onProgress, intervalMs = 3000, timeout
         if (task.status === 'success') {
           console.log('[Tripo] task.output raw:', JSON.stringify(task.output, null, 2));
 
-          // pbr_model may be an object { url, type } or (rarely) a plain string
-          const rawModel = task.output?.pbr_model;
-          const modelUrl = typeof rawModel === 'string' ? rawModel : (rawModel?.url ?? null);
-
-          // rendered_image may be an object { url, type } or a plain string
-          const rawImage = task.output?.rendered_image;
-          const renderedImageUrl = typeof rawImage === 'string' ? rawImage : (rawImage?.url ?? null);
+          const modelUrl = extractModelUrl(task.output);
+          const renderedImageUrl = extractFileUrl(task.output?.rendered_image);
 
           console.log('[Tripo] modelUrl:', modelUrl);
           console.log('[Tripo] renderedImageUrl:', renderedImageUrl);
@@ -170,4 +185,58 @@ export async function generateAvatarFromImage(imageUri, onProgress) {
   const imageToken = await uploadImage(imageUri);
   const taskId = await createImageTo3DTask(imageToken, fileType);
   return waitForCompletion(taskId, onProgress);
+}
+
+async function runTaskAndWait(payload, onProgress) {
+  const taskId = await createTask(payload);
+  return waitForCompletion(taskId, onProgress);
+}
+
+export async function animateAvatarFromTask(originalTaskId, animation = 'preset:idle', onProgress) {
+  if (!originalTaskId) {
+    throw new Error('Missing avatar task id.');
+  }
+
+  const preregcheck = await runTaskAndWait(
+    {
+      type: 'animate_prerigcheck',
+      original_model_task_id: originalTaskId,
+    },
+    (pct, status) => onProgress?.({ step: 'Checking avatar', pct, status })
+  );
+
+  const preregcheckTask = await getTaskStatus(preregcheck.taskId);
+  const riggable = preregcheckTask?.output?.riggable;
+  if (riggable === false) {
+    throw new Error('This avatar cannot be animated automatically yet.');
+  }
+
+  const rig = await runTaskAndWait(
+    {
+      type: 'animate_rig',
+      original_model_task_id: originalTaskId,
+      out_format: 'glb',
+      spec: 'tripo',
+    },
+    (pct, status) => onProgress?.({ step: 'Preparing movement', pct, status })
+  );
+
+  const animated = await runTaskAndWait(
+    {
+      type: 'animate_retarget',
+      original_model_task_id: rig.taskId,
+      animation,
+      out_format: 'glb',
+      bake_animation: true,
+    },
+    (pct, status) => onProgress?.({ step: 'Applying animation', pct, status })
+  );
+
+  return {
+    rigTaskId: rig.taskId,
+    animatedTaskId: animated.taskId,
+    rigType: preregcheckTask?.output?.rig_type ?? null,
+    modelUrl: animated.modelUrl,
+    renderedImageUrl: animated.renderedImageUrl,
+  };
 }

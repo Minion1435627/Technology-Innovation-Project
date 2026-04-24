@@ -1,18 +1,23 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Alert,
+  ScrollView, Alert, Image, ActivityIndicator, PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
+import Avatar3DViewer from '../components/Avatar3DViewer';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements } from '../lib/db';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
+import { animateAvatarFromTask, generateAvatarFromImage } from '../services/tripoApi';
+
+const GEN_STATE = { IDLE: 'idle', UPLOADING: 'uploading', GENERATING: 'generating', DONE: 'done', ERROR: 'error' };
 
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
@@ -24,6 +29,20 @@ const XP_LEVELS = [
   { level: 4, xp: 500 },
   { level: 5, xp: 1000 },
 ];
+
+const ROTATION_STEP = 45;
+const DEFAULT_MODEL_ROTATION = 90;
+const ANIMATION_OPTIONS = [
+  { label: 'Idle', value: 'preset:idle' },
+  { label: 'Turn', value: 'preset:turn' },
+  { label: 'Walk', value: 'preset:walk' },
+  { label: 'Run', value: 'preset:run' },
+  { label: 'Jump', value: 'preset:jump' },
+];
+
+function normalizeDegrees(value) {
+  return ((value % 360) + 360) % 360;
+}
 
 const getLevelFromXp = (xp) =>
   XP_LEVELS.reduce((lvl, rule) => (xp ?? 0) >= rule.xp ? rule.level : lvl, 1);
@@ -69,10 +88,17 @@ export default function ProfileScreen({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [weeklyRank, setWeeklyRank] = useState(null);
   const [unlockedKeys, setUnlockedKeys] = useState([]);
+  const [genState, setGenState] = useState(GEN_STATE.IDLE);
+  const [genProgress, setGenProgress] = useState(0);
+  const [genError, setGenError] = useState('');
+  const [modelRotation, setModelRotation] = useState(DEFAULT_MODEL_ROTATION);
+  const [animateState, setAnimateState] = useState('idle');
+  const [animateLabel, setAnimateLabel] = useState('');
+  const [selectedAnimation, setSelectedAnimation] = useState('preset:idle');
   const { posts, removePost } = usePosts();
   const { friends } = useFriends();
   const { chats } = useChats();
-  const { profile, user: authUser } = useAuth();
+  const { profile, user: authUser, patchProfile } = useAuth();
   const user = profile;
 
   useEffect(() => {
@@ -149,6 +175,93 @@ export default function ProfileScreen({ navigation }) {
     ? `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${computedLevel + 1}`
     : 'You have reached the highest level!';
 
+  const rotationStartRef = useRef(modelRotation);
+  const avatarPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 3,
+      onPanResponderGrant: () => {
+        rotationStartRef.current = modelRotation;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const nextRotation = normalizeDegrees(rotationStartRef.current + gestureState.dx * 0.7);
+        setModelRotation(nextRotation);
+      },
+    })
+  ).current;
+
+  const rotateByStep = (delta) => {
+    setModelRotation((current) => normalizeDegrees(current + delta));
+  };
+
+  const isGenerating = genState === GEN_STATE.UPLOADING || genState === GEN_STATE.GENERATING;
+
+  const pickAndGenerate = async () => {
+    if (isGenerating) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo library access to upload a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const uri = result.assets[0].uri;
+    setGenState(GEN_STATE.UPLOADING);
+    setGenProgress(0);
+    setGenError('');
+
+    try {
+      const gen = await generateAvatarFromImage(uri, (pct, status) => {
+        setGenProgress(pct);
+        if (status === 'running') setGenState(GEN_STATE.GENERATING);
+      });
+      setGenState(GEN_STATE.DONE);
+      await patchProfile({
+        avatar_url: gen.modelUrl,
+        avatar_image_url: gen.renderedImageUrl,
+        avatar_task_id: gen.taskId,
+      });
+    } catch (err) {
+      setGenError(err.message ?? 'Generation failed. Please try again.');
+      setGenState(GEN_STATE.ERROR);
+    }
+  };
+
+  const handleAnimateAvatar = async () => {
+    if (animateState === 'running') return;
+    if (!user.avatar_task_id) {
+      Alert.alert('Animation unavailable', 'This avatar needs to be generated again before motion can be added.');
+      return;
+    }
+
+    try {
+      setAnimateState('running');
+      setAnimateLabel('Checking avatar...');
+
+      const result = await animateAvatarFromTask(user.avatar_task_id, selectedAnimation, ({ step, pct }) => {
+        setAnimateLabel(`${step}${typeof pct === 'number' ? ` ${pct}%` : ''}`);
+      });
+
+      await patchProfile({
+        avatar_url: result.modelUrl,
+        avatar_image_url: result.renderedImageUrl ?? user.avatar_image_url,
+      });
+
+      setAnimateState('idle');
+      setAnimateLabel('');
+      const selectedLabel = ANIMATION_OPTIONS.find(option => option.value === selectedAnimation)?.label ?? 'Selected';
+      Alert.alert('Animation ready', `${selectedLabel} motion is now applied to your avatar.`);
+    } catch (err) {
+      setAnimateState('error');
+      setAnimateLabel('');
+      Alert.alert('Animation unavailable', err.message ?? 'We could not add movement to this avatar.');
+    }
+  };
+
   const openOwnPostDetail = (post) => {
     navigation.navigate('PostDetail', {
       post: {
@@ -223,6 +336,111 @@ export default function ProfileScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* ---------- 3D Avatar ---------- */}
+        <View style={styles.avatarBannerWrap} {...avatarPanResponder.panHandlers}>
+          {user.avatar_url && genState === GEN_STATE.IDLE ? (
+            <Avatar3DViewer
+              modelUrl={user.avatar_url}
+              rotation={modelRotation}
+              style={styles.avatarBanner}
+            />
+          ) : isGenerating ? (
+            <View style={[styles.avatarBanner, styles.avatarBannerCenter]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.avatarBannerText}>
+                {genState === GEN_STATE.UPLOADING
+                  ? 'Uploading photo…'
+                  : `Generating 3D avatar… ${genProgress}%`}
+              </Text>
+              <View style={styles.avatarProgressBar}>
+                <View style={[styles.avatarProgressFill, { width: `${genProgress}%` }]} />
+              </View>
+            </View>
+          ) : genState === GEN_STATE.ERROR ? (
+            <TouchableOpacity
+              style={[styles.avatarBanner, styles.avatarBannerCenter]}
+              onPress={pickAndGenerate}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="warning-outline" size={40} color={colors.error} />
+              <Text style={[styles.avatarBannerText, { color: colors.error }]}>Generation failed</Text>
+              <Text style={styles.avatarBannerSub}>{genError}</Text>
+              <Text style={[styles.avatarBannerSub, { color: colors.primary, marginTop: 6 }]}>Tap to retry</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.avatarBanner, styles.avatarBannerCenter]}
+              onPress={pickAndGenerate}
+              activeOpacity={0.75}
+            >
+              <View style={styles.avatarBannerIcon}>
+                <Ionicons name="person-outline" size={40} color={colors.textMuted} />
+              </View>
+              <Text style={styles.avatarBannerText}>Create 3D Avatar</Text>
+              <Text style={styles.avatarBannerSub}>Tap to upload a photo and generate your avatar</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={styles.avatarHint}>Drag the avatar or use the arrows to turn left and right.</Text>
+
+        {/* Rotation controls + change button — shown only when avatar exists */}
+        {user.avatar_url && genState === GEN_STATE.IDLE && (
+          <View style={styles.avatarControls}>
+            <View style={styles.rotationButtons}>
+              <TouchableOpacity
+                style={styles.rotateBtn}
+                onPress={() => rotateByStep(-ROTATION_STEP)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={styles.rotateBtnHint}>{Math.round(normalizeDegrees(modelRotation))}°</Text>
+              <TouchableOpacity
+                style={styles.rotateBtn}
+                onPress={() => rotateByStep(ROTATION_STEP)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.motionLabel}>Choose a motion</Text>
+            <View style={styles.animationPicker}>
+              {ANIMATION_OPTIONS.map((option) => {
+                const selected = selectedAnimation === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.animationChip, selected && styles.animationChipActive]}
+                    onPress={() => setSelectedAnimation(option.value)}
+                    disabled={animateState === 'running'}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.animationChipText, selected && styles.animationChipTextActive]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.avatarActionRow}>
+              <TouchableOpacity
+                style={[styles.avatarChangePill, animateState === 'running' && styles.avatarActionDisabled]}
+                onPress={handleAnimateAvatar}
+                disabled={animateState === 'running'}
+              >
+                <Ionicons name="walk-outline" size={15} color={colors.textSecondary} />
+                <Text style={styles.avatarChangePillText}>
+                  {animateState === 'running' ? (animateLabel || 'Adding motion...') : 'Add Motion'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.avatarChangePill} onPress={pickAndGenerate}>
+                <Ionicons name="camera-outline" size={15} color={colors.textSecondary} />
+                <Text style={styles.avatarChangePillText}>Change Avatar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* ---------- Stats strip ---------- */}
         <View style={styles.statsStrip}>
@@ -554,7 +772,102 @@ const styles = StyleSheet.create({
   },
   actionBtnGhostText: { ...typography.smallBold, color: colors.primary },
 
+  /* Avatar banner */
+  avatarBannerWrap: {
+    marginHorizontal: 16, marginTop: 14,
+    aspectRatio: 1,
+    position: 'relative',
+  },
+  avatarBanner: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1.5, borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  avatarBannerCenter: {
+    alignItems: 'center', justifyContent: 'center', gap: 10,
+    borderStyle: 'dashed',
+  },
+  avatarControls: {
+    marginHorizontal: 16, marginTop: 8, gap: 8,
+  },
+  avatarHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 8,
+    marginHorizontal: 24,
+  },
+  avatarActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  avatarChangePill: {
+    flex: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.card,
+    borderWidth: 1, borderColor: colors.border,
+    paddingVertical: 9, borderRadius: 12,
+  },
+  avatarActionDisabled: { opacity: 0.7 },
+  avatarChangePillText: { ...typography.small, color: colors.textSecondary, fontWeight: '600' },
+  avatarBannerIcon: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: colors.background,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarBannerText: { ...typography.body, color: colors.textSecondary, fontWeight: '600' },
+  avatarBannerSub: { ...typography.small, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 24 },
+  avatarProgressBar: {
+    width: '60%', height: 6,
+    backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden',
+  },
+  avatarProgressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 3 },
+  rotationButtons: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24,
+  },
+  rotateBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.card,
+    borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rotateBtnHint: { ...typography.small, color: colors.textMuted },
+  motionLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  animationPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  animationChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  animationChipActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
+  animationChipText: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  animationChipTextActive: {
+    color: colors.primary,
+  },
+
   /* Stats strip */
+
   statsStrip: {
     flexDirection: 'row',
     marginHorizontal: 16, marginTop: 14,

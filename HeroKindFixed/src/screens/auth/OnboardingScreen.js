@@ -121,6 +121,7 @@ export default function OnboardingScreen({ navigation }) {
         await patchProfile({
           avatar_url: result.modelUrl,
           avatar_image_url: result.renderedImageUrl,
+          avatar_task_id: result.taskId,
         });
         console.log('[Onboarding] patchProfile done');
       } else {
