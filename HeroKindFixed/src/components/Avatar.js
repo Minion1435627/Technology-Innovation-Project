@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors } from '../theme/colors';
 
 const LEVEL_COLORS = [
@@ -12,7 +12,7 @@ const LEVEL_COLORS = [
 
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
 
-export default function Avatar({ name = '', size = 44, level = 1, showBadge = true, style }) {
+export default function Avatar({ name = '', size = 44, level = 1, showBadge = true, style, imageUri }) {
   const initials = name
     .split(' ')
     .map(w => w[0])
@@ -27,6 +27,12 @@ export default function Avatar({ name = '', size = 44, level = 1, showBadge = tr
 
   return (
     <View style={[styles.wrapper, style]}>
+      {imageUri ? (
+        <Image
+          source={{ uri: imageUri }}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
+        />
+      ) : (
       <View
         style={[
           styles.circle,
@@ -35,6 +41,7 @@ export default function Avatar({ name = '', size = 44, level = 1, showBadge = tr
       >
         <Text style={[styles.initials, { fontSize }]}>{initials}</Text>
       </View>
+      )}
       {showBadge && (
         <View
           style={[

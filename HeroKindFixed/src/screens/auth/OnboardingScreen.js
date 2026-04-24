@@ -9,6 +9,7 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { generateAvatarFromImage } from '../../services/tripoApi';
 import AvatarCropEditor from '../../components/AvatarCropEditor';
+import { useAuth } from '../../context/AuthContext';
 
 // Match CoverScreen palette
 const GREEN       = '#86A778';
@@ -44,6 +45,7 @@ const STATE = {
 };
 
 export default function OnboardingScreen({ navigation }) {
+  const { user: authUser, patchProfile } = useAuth();
   const [slide, setSlide] = useState(0);
   const [imageUri, setImageUri] = useState(null);
   const [genState, setGenState] = useState(STATE.IDLE);
@@ -107,9 +109,25 @@ export default function OnboardingScreen({ navigation }) {
         setProgress(pct);
         if (status === 'running') setGenState(STATE.GENERATING);
       });
+
+      console.log('[Onboarding] generation result:', JSON.stringify(result, null, 2));
+
       setAvatarResult(result);
       setGenState(STATE.DONE);
+
+      // Save avatar URLs to the user's profile in Supabase
+      if (authUser?.id) {
+        console.log('[Onboarding] saving to Supabase — avatar_url:', result.modelUrl, 'avatar_image_url:', result.renderedImageUrl);
+        await patchProfile({
+          avatar_url: result.modelUrl,
+          avatar_image_url: result.renderedImageUrl,
+        });
+        console.log('[Onboarding] patchProfile done');
+      } else {
+        console.warn('[Onboarding] no authUser.id — skipping Supabase save');
+      }
     } catch (err) {
+      console.error('[Onboarding] generation/save error:', err);
       setErrorMsg(err.message ?? 'Something went wrong. Please try again.');
       setGenState(STATE.ERROR);
     }
@@ -121,14 +139,29 @@ export default function OnboardingScreen({ navigation }) {
   const avatarSelected = imageUri !== null;
 
   function uploadBoxContent() {
-    if (genState === STATE.DONE && avatarResult?.renderedImageUrl) {
+    if (genState === STATE.DONE) {
       return (
         <>
-          <Image
-            source={{ uri: avatarResult.renderedImageUrl }}
-            style={styles.avatarPreviewImage}
-          />
+          {avatarResult?.renderedImageUrl ? (
+            <Image
+              source={{ uri: avatarResult.renderedImageUrl }}
+              style={styles.avatarPreviewImage}
+            />
+          ) : (
+            <Text style={styles.uploadIcon}>✅</Text>
+          )}
           <Text style={styles.avatarPreviewText}>3D avatar ready!</Text>
+        </>
+      );
+    }
+    if (genState === STATE.ERROR) {
+      return (
+        <>
+          <Text style={styles.uploadIcon}>⚠️</Text>
+          <Text style={[styles.avatarPreviewText, { color: '#C0392B' }]}>Generation failed</Text>
+          <Text style={[styles.uploadSub, { color: '#C0392B', textAlign: 'center', paddingHorizontal: 12 }]}>
+            {errorMsg}
+          </Text>
         </>
       );
     }

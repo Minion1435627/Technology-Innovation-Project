@@ -87,7 +87,7 @@ export async function createImageTo3DTask(imageToken, fileType = 'jpg') {
  *   task_id: string,
  *   status: string,
  *   progress: number,
- *   output?: { model: string, rendered_image: string }
+ *   output?: { pbr_model: { url: string }, rendered_image: { url: string } }
  * }>}
  */
 export async function getTaskStatus(taskId) {
@@ -122,10 +122,23 @@ export function waitForCompletion(taskId, onProgress, intervalMs = 3000, timeout
         onProgress?.(task.progress ?? 0, task.status);
 
         if (task.status === 'success') {
+          console.log('[Tripo] task.output raw:', JSON.stringify(task.output, null, 2));
+
+          // pbr_model may be an object { url, type } or (rarely) a plain string
+          const rawModel = task.output?.pbr_model;
+          const modelUrl = typeof rawModel === 'string' ? rawModel : (rawModel?.url ?? null);
+
+          // rendered_image may be an object { url, type } or a plain string
+          const rawImage = task.output?.rendered_image;
+          const renderedImageUrl = typeof rawImage === 'string' ? rawImage : (rawImage?.url ?? null);
+
+          console.log('[Tripo] modelUrl:', modelUrl);
+          console.log('[Tripo] renderedImageUrl:', renderedImageUrl);
+
           resolve({
             taskId,
-            modelUrl: task.output?.model ?? null,
-            renderedImageUrl: task.output?.rendered_image ?? null,
+            modelUrl,
+            renderedImageUrl,
           });
         } else if (task.status === 'failed' || task.status === 'cancelled') {
           reject(new Error(`Avatar generation ${task.status}.`));
