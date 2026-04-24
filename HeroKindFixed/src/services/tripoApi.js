@@ -184,12 +184,73 @@ export async function generateAvatarFromImage(imageUri, onProgress) {
 
   const imageToken = await uploadImage(imageUri);
   const taskId = await createImageTo3DTask(imageToken, fileType);
-  return waitForCompletion(taskId, onProgress);
+  onProgress?.(0, 'queued', 'generation');
+  const baseModel = await waitForCompletion(taskId, (pct, status) => {
+    const scaledPct = Math.round((pct ?? 0) * 0.55);
+    onProgress?.(scaledPct, status, 'generation');
+  });
+
+  onProgress?.(55, 'queued', 'texturing');
+  const texturedModel = await textureAvatarFromTask(taskId, {
+    image: {
+      type: fileType,
+      file_token: imageToken,
+    },
+  }, (pct, status) => {
+    const scaledPct = 55 + Math.round((pct ?? 0) * 0.45);
+    onProgress?.(scaledPct, status, 'texturing');
+  });
+
+  return {
+    taskId: texturedModel.taskId,
+    modelUrl: texturedModel.modelUrl ?? baseModel.modelUrl,
+    baseModelUrl: baseModel.modelUrl,
+    textureModelUrl: texturedModel.modelUrl ?? null,
+    renderedImageUrl: texturedModel.renderedImageUrl ?? baseModel.renderedImageUrl,
+    sourceTaskId: taskId,
+  };
 }
 
 async function runTaskAndWait(payload, onProgress) {
   const taskId = await createTask(payload);
   return waitForCompletion(taskId, onProgress);
+}
+
+export async function textureAvatarFromTask(originalTaskId, texturePrompt, onProgress) {
+  if (!originalTaskId) {
+    throw new Error('Missing avatar task id.');
+  }
+
+  const payload = {
+    type: 'texture_model',
+    original_model_task_id: originalTaskId,
+    texture: true,
+    pbr: true,
+    bake: true,
+    texture_alignment: 'original_image',
+    texture_quality: 'detailed',
+    model_version: 'v3.0-20250812',
+  };
+
+  if (texturePrompt) {
+    payload.texture_prompt = texturePrompt;
+  }
+
+  const result = await runTaskAndWait(
+    payload,
+    (pct, status) => onProgress?.(pct, status)
+  );
+
+  try {
+    const task = await getTaskStatus(result.taskId);
+    console.log('[Tripo][texture_model] task.output raw:', JSON.stringify(task.output, null, 2));
+    console.log('[Tripo][texture_model] extracted modelUrl:', extractModelUrl(task.output));
+    console.log('[Tripo][texture_model] extracted renderedImageUrl:', extractFileUrl(task.output?.rendered_image));
+  } catch (err) {
+    console.warn('[Tripo][texture_model] failed to inspect task output:', err);
+  }
+
+  return result;
 }
 
 export async function animateAvatarFromTask(originalTaskId, animation = 'preset:idle', onProgress) {
@@ -231,6 +292,19 @@ export async function animateAvatarFromTask(originalTaskId, animation = 'preset:
     },
     (pct, status) => onProgress?.({ step: 'Applying animation', pct, status })
   );
+
+  try {
+    const task = await getTaskStatus(animated.taskId);
+    console.log('[Tripo][animate_retarget] task.output raw:', JSON.stringify(task.output, null, 2));
+    console.log('[Tripo][animate_retarget] extracted modelUrl:', extractModelUrl(task.output));
+    console.log('[Tripo][animate_retarget] extracted renderedImageUrl:', extractFileUrl(task.output?.rendered_image));
+  } catch (err) {
+    console.warn('[Tripo][animate_retarget] failed to inspect task output:', err);
+  }
+
+  if (!animated.modelUrl) {
+    throw new Error('Animation finished, but no animated model file was returned.');
+  }
 
   return {
     rigTaskId: rig.taskId,

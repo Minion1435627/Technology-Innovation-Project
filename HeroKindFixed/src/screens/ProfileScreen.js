@@ -44,6 +44,17 @@ function normalizeDegrees(value) {
   return ((value % 360) + 360) % 360;
 }
 
+function getRotationLabel(value) {
+  const rounded = Math.round(value);
+  const normalized = normalizeDegrees(rounded);
+
+  if (rounded > 0 && normalized === 0) return 360;
+  if (rounded < 0 && normalized === 0) return -360;
+  if (rounded < 0) return normalized - 360;
+
+  return normalized;
+}
+
 const getLevelFromXp = (xp) =>
   XP_LEVELS.reduce((lvl, rule) => (xp ?? 0) >= rule.xp ? rule.level : lvl, 1);
 const getXpNext = (level) => XP_LEVELS.find(r => r.level === level + 1)?.xp ?? null;
@@ -91,15 +102,40 @@ export default function ProfileScreen({ navigation }) {
   const [genState, setGenState] = useState(GEN_STATE.IDLE);
   const [genProgress, setGenProgress] = useState(0);
   const [genError, setGenError] = useState('');
+  const [genLabel, setGenLabel] = useState('');
   const [modelRotation, setModelRotation] = useState(DEFAULT_MODEL_ROTATION);
   const [animateState, setAnimateState] = useState('idle');
   const [animateLabel, setAnimateLabel] = useState('');
   const [selectedAnimation, setSelectedAnimation] = useState('preset:idle');
+  const [previewMode, setPreviewMode] = useState('auto');
   const { posts, removePost } = usePosts();
   const { friends } = useFriends();
   const { chats } = useChats();
   const { profile, user: authUser, patchProfile } = useAuth();
   const user = profile;
+  const previewSources = [
+    { key: 'auto', label: 'Auto', url: user?.avatar_animated_url || user?.avatar_texture_url || user?.avatar_url || null },
+    { key: 'base', label: 'Base', url: user?.avatar_url || null },
+    { key: 'texture', label: 'Texture', url: user?.avatar_texture_url || null },
+    { key: 'animated', label: 'Animated', url: user?.avatar_animated_url || null },
+  ];
+  const activeAvatarUrl = previewSources.find(source => source.key === previewMode)?.url ?? null;
+  const availablePreviewSources = previewSources.filter(source => source.url);
+
+  useEffect(() => {
+    if (activeAvatarUrl && genState === GEN_STATE.DONE) {
+      setGenState(GEN_STATE.IDLE);
+      setGenLabel('');
+      setGenProgress(0);
+    }
+  }, [activeAvatarUrl, genState]);
+
+  useEffect(() => {
+    const selectedSource = previewSources.find(source => source.key === previewMode);
+    if (!selectedSource?.url) {
+      setPreviewMode('auto');
+    }
+  }, [previewMode, user?.avatar_url, user?.avatar_texture_url, user?.avatar_animated_url]);
 
   useEffect(() => {
     if (!authUser?.id) return;
@@ -184,14 +220,14 @@ export default function ProfileScreen({ navigation }) {
         rotationStartRef.current = modelRotation;
       },
       onPanResponderMove: (_, gestureState) => {
-        const nextRotation = normalizeDegrees(rotationStartRef.current + gestureState.dx * 0.7);
+        const nextRotation = rotationStartRef.current + gestureState.dx * 0.7;
         setModelRotation(nextRotation);
       },
     })
   ).current;
 
   const rotateByStep = (delta) => {
-    setModelRotation((current) => normalizeDegrees(current + delta));
+    setModelRotation((current) => current + delta);
   };
 
   const isGenerating = genState === GEN_STATE.UPLOADING || genState === GEN_STATE.GENERATING;
@@ -213,18 +249,25 @@ export default function ProfileScreen({ navigation }) {
     setGenState(GEN_STATE.UPLOADING);
     setGenProgress(0);
     setGenError('');
+    setGenLabel('');
 
     try {
-      const gen = await generateAvatarFromImage(uri, (pct, status) => {
+      const gen = await generateAvatarFromImage(uri, (pct, status, phase) => {
         setGenProgress(pct);
-        if (status === 'running') setGenState(GEN_STATE.GENERATING);
+        if (status === 'running' || status === 'queued') setGenState(GEN_STATE.GENERATING);
+        setGenLabel(phase === 'texturing' ? 'Adding colour to your avatar…' : 'Generating 3D avatar…');
       });
       setGenState(GEN_STATE.DONE);
       await patchProfile({
-        avatar_url: gen.modelUrl,
+        avatar_url: gen.baseModelUrl ?? gen.modelUrl,
+        avatar_texture_url: gen.textureModelUrl ?? null,
+        avatar_animated_url: null,
         avatar_image_url: gen.renderedImageUrl,
         avatar_task_id: gen.taskId,
       });
+      setGenState(GEN_STATE.IDLE);
+      setGenLabel('');
+      setGenProgress(0);
     } catch (err) {
       setGenError(err.message ?? 'Generation failed. Please try again.');
       setGenState(GEN_STATE.ERROR);
@@ -246,8 +289,12 @@ export default function ProfileScreen({ navigation }) {
         setAnimateLabel(`${step}${typeof pct === 'number' ? ` ${pct}%` : ''}`);
       });
 
+      if (!result.modelUrl) {
+        throw new Error('The animation step did not return a usable 3D file.');
+      }
+
       await patchProfile({
-        avatar_url: result.modelUrl,
+        avatar_animated_url: result.modelUrl,
         avatar_image_url: result.renderedImageUrl ?? user.avatar_image_url,
       });
 
@@ -339,9 +386,10 @@ export default function ProfileScreen({ navigation }) {
 
         {/* ---------- 3D Avatar ---------- */}
         <View style={styles.avatarBannerWrap} {...avatarPanResponder.panHandlers}>
-          {user.avatar_url && genState === GEN_STATE.IDLE ? (
+          {activeAvatarUrl && genState === GEN_STATE.IDLE ? (
             <Avatar3DViewer
-              modelUrl={user.avatar_url}
+              key={activeAvatarUrl}
+              modelUrl={activeAvatarUrl}
               rotation={modelRotation}
               style={styles.avatarBanner}
             />
@@ -351,7 +399,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.avatarBannerText}>
                 {genState === GEN_STATE.UPLOADING
                   ? 'Uploading photo…'
-                  : `Generating 3D avatar… ${genProgress}%`}
+                  : `${genLabel || 'Generating 3D avatar…'} ${genProgress}%`}
               </Text>
               <View style={styles.avatarProgressBar}>
                 <View style={[styles.avatarProgressFill, { width: `${genProgress}%` }]} />
@@ -385,8 +433,26 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.avatarHint}>Drag the avatar or use the arrows to turn left and right.</Text>
 
         {/* Rotation controls + change button — shown only when avatar exists */}
-        {user.avatar_url && genState === GEN_STATE.IDLE && (
+        {activeAvatarUrl && genState === GEN_STATE.IDLE && (
           <View style={styles.avatarControls}>
+            <Text style={styles.motionLabel}>Preview source</Text>
+            <View style={styles.animationPicker}>
+              {availablePreviewSources.map((source) => {
+                const selected = previewMode === source.key;
+                return (
+                  <TouchableOpacity
+                    key={source.key}
+                    style={[styles.animationChip, selected && styles.animationChipActive]}
+                    onPress={() => setPreviewMode(source.key)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.animationChipText, selected && styles.animationChipTextActive]}>
+                      {source.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <View style={styles.rotationButtons}>
               <TouchableOpacity
                 style={styles.rotateBtn}
@@ -395,7 +461,7 @@ export default function ProfileScreen({ navigation }) {
               >
                 <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
               </TouchableOpacity>
-              <Text style={styles.rotateBtnHint}>{Math.round(normalizeDegrees(modelRotation))}°</Text>
+              <Text style={styles.rotateBtnHint}>{getRotationLabel(modelRotation)}°</Text>
               <TouchableOpacity
                 style={styles.rotateBtn}
                 onPress={() => rotateByStep(ROTATION_STEP)}

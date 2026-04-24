@@ -52,6 +52,7 @@ export default function OnboardingScreen({ navigation }) {
   const [progress, setProgress] = useState(0);
   const [avatarResult, setAvatarResult] = useState(null); // { modelUrl, renderedImageUrl }
   const [errorMsg, setErrorMsg] = useState('');
+  const [genLabel, setGenLabel] = useState('');
   // Crop editor state
   const [pendingImageUri, setPendingImageUri] = useState(null);
   const [cropVisible, setCropVisible]         = useState(false);
@@ -103,11 +104,13 @@ export default function OnboardingScreen({ navigation }) {
     setGenState(STATE.UPLOADING);
     setProgress(0);
     setErrorMsg('');
+    setGenLabel('');
 
     try {
-      const result = await generateAvatarFromImage(imageUri, (pct, status) => {
+      const result = await generateAvatarFromImage(imageUri, (pct, status, phase) => {
         setProgress(pct);
-        if (status === 'running') setGenState(STATE.GENERATING);
+        if (status === 'running' || status === 'queued') setGenState(STATE.GENERATING);
+        setGenLabel(phase === 'texturing' ? 'Adding colour…' : 'Generating 3D model…');
       });
 
       console.log('[Onboarding] generation result:', JSON.stringify(result, null, 2));
@@ -119,7 +122,9 @@ export default function OnboardingScreen({ navigation }) {
       if (authUser?.id) {
         console.log('[Onboarding] saving to Supabase — avatar_url:', result.modelUrl, 'avatar_image_url:', result.renderedImageUrl);
         await patchProfile({
-          avatar_url: result.modelUrl,
+          avatar_url: result.baseModelUrl ?? result.modelUrl,
+          avatar_texture_url: result.textureModelUrl ?? null,
+          avatar_animated_url: null,
           avatar_image_url: result.renderedImageUrl,
           avatar_task_id: result.taskId,
         });
@@ -169,7 +174,7 @@ export default function OnboardingScreen({ navigation }) {
     if (isProcessing) {
       const label = genState === STATE.UPLOADING
         ? 'Uploading image…'
-        : `Generating 3D model… ${progress}%`;
+        : `${genLabel || 'Generating 3D model…'} ${progress}%`;
       return (
         <>
           <ActivityIndicator size="large" color={GREEN} />

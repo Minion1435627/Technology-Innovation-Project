@@ -7,6 +7,7 @@ import * as THREE from 'three';
 export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
   const [status, setStatus] = useState('loading');
   const [errorText, setErrorText] = useState('');
+  const [textureStatus, setTextureStatus] = useState('');
   const pivotRef = useRef(null);
   const targetRotationRef = useRef(0);
   const currentRotationRef = useRef(0);
@@ -20,12 +21,20 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
   useEffect(() => {
     setStatus('loading');
     setErrorText('');
+    setTextureStatus('');
   }, [modelUrl]);
 
   const onContextCreate = async (gl) => {
     const renderer = new Renderer({ gl });
     renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
     renderer.setClearColor(0xfffcf9, 1);
+    if ('outputColorSpace' in renderer && THREE.SRGBColorSpace) {
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+    } else if ('outputEncoding' in renderer && THREE.sRGBEncoding) {
+      renderer.outputEncoding = THREE.sRGBEncoding;
+    }
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(
@@ -62,10 +71,17 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
       const model = gltf.scene;
 
       let meshCount = 0;
+      let baseTextureCount = 0;
+      let extraTextureCount = 0;
+      let vertexColorCount = 0;
+      let flatColorCount = 0;
       model.updateMatrixWorld(true);
       model.traverse((node) => {
         if (node.isMesh && node.geometry) {
           meshCount += 1;
+          if (node.geometry?.attributes?.color) {
+            vertexColorCount += 1;
+          }
           if (node.material) {
             const materials = Array.isArray(node.material) ? node.material : [node.material];
             materials.forEach((mat) => {
@@ -73,6 +89,37 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
               mat.side = THREE.DoubleSide;
               if (typeof mat.opacity === 'number' && mat.opacity === 0) {
                 mat.opacity = 1;
+              }
+              if (mat.map) {
+                baseTextureCount += 1;
+                if ('colorSpace' in mat.map && THREE.SRGBColorSpace) {
+                  mat.map.colorSpace = THREE.SRGBColorSpace;
+                } else if ('encoding' in mat.map && THREE.sRGBEncoding) {
+                  mat.map.encoding = THREE.sRGBEncoding;
+                }
+                mat.map.flipY = false;
+                mat.map.needsUpdate = true;
+              }
+              if (mat.emissiveMap) {
+                extraTextureCount += 1;
+                if ('colorSpace' in mat.emissiveMap && THREE.SRGBColorSpace) {
+                  mat.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+                } else if ('encoding' in mat.emissiveMap && THREE.sRGBEncoding) {
+                  mat.emissiveMap.encoding = THREE.sRGBEncoding;
+                }
+                mat.emissiveMap.flipY = false;
+                mat.emissiveMap.needsUpdate = true;
+              }
+              if (mat.metalnessMap) extraTextureCount += 1;
+              if (mat.roughnessMap) extraTextureCount += 1;
+              if (mat.normalMap) extraTextureCount += 1;
+              if (mat.aoMap) extraTextureCount += 1;
+              if (mat.vertexColors) vertexColorCount += 1;
+              if (mat.color && typeof mat.color.getHexString === 'function') {
+                const hex = mat.color.getHexString();
+                if (hex && hex !== 'ffffff') {
+                  flatColorCount += 1;
+                }
               }
               mat.needsUpdate = true;
             });
@@ -85,6 +132,17 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
       if (meshCount === 0) {
         throw new Error('Model contains no visible mesh geometry.');
       }
+
+      const statusParts = [];
+      if (baseTextureCount > 0) statusParts.push(`Base texture (${baseTextureCount})`);
+      if (extraTextureCount > 0) statusParts.push(`Other maps (${extraTextureCount})`);
+      if (vertexColorCount > 0) statusParts.push(`Vertex colors (${vertexColorCount})`);
+      if (flatColorCount > 0) statusParts.push(`Flat color (${flatColorCount})`);
+      if (statusParts.length === 0) statusParts.push('No color source found');
+
+      const summary = statusParts.join(' • ');
+      setTextureStatus(summary);
+      console.log('[Avatar3D] color source summary:', summary);
 
       const pivot = new THREE.Group();
       scene.add(pivot);
@@ -183,6 +241,11 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
           <Text style={styles.readyBadgeText}>Original texture</Text>
         </View>
       )}
+      {status === 'ready' && textureStatus ? (
+        <View style={styles.textureBadge}>
+          <Text style={styles.textureBadgeText}>{textureStatus}</Text>
+        </View>
+      ) : null}
       {status === 'error' && (
         <View style={styles.overlay}>
           <Text style={styles.err}>Could not load model.{'\n'}{errorText || 'Load failed'}</Text>
@@ -213,4 +276,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   readyBadgeText: { fontSize: 11, color: '#5f7f54', fontWeight: '600' },
+  textureBadge: {
+    position: 'absolute',
+    top: 38,
+    right: 10,
+    backgroundColor: 'rgba(95, 127, 84, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    maxWidth: '65%',
+  },
+  textureBadgeText: { fontSize: 11, color: '#6b6b6b', fontWeight: '600' },
 });
