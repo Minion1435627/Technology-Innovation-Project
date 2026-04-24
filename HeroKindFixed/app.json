@@ -17,6 +17,18 @@
       "bundleIdentifier": "com.helpmate.app",
       "config": {
         "googleMapsApiKey": "AIzaSyDgrspBzEcBMc8vOj6pr86bvrvRTxGUAdI"
+      },
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "api.tripo3d.ai": {
+              "NSExceptionAllowsInsecureHTTPLoads": false,
+              "NSIncludesSubdomains": true,
+              "NSExceptionMinimumTLSVersion": "TLSv1.2"
+            }
+          }
+        }
       }
     },
     "android": {

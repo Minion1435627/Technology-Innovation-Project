@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-   ScrollView, Animated,
+  ScrollView, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { generateAvatarFromImage } from '../../services/tripoApi';
+import AvatarCropEditor from '../../components/AvatarCropEditor';
+import { useAuth } from '../../context/AuthContext';
 
 // Match CoverScreen palette
 const GREEN       = '#86A778';
@@ -31,11 +35,166 @@ const SLIDES = [
   },
 ];
 
+// Generation states
+const STATE = {
+  IDLE: 'idle',
+  UPLOADING: 'uploading',
+  GENERATING: 'generating',
+  DONE: 'done',
+  ERROR: 'error',
+};
+
 export default function OnboardingScreen({ navigation }) {
+  const { user: authUser, patchProfile } = useAuth();
   const [slide, setSlide] = useState(0);
-  const [avatarSelected, setAvatarSelected] = useState(false);
+  const [imageUri, setImageUri] = useState(null);
+  const [genState, setGenState] = useState(STATE.IDLE);
+  const [progress, setProgress] = useState(0);
+  const [avatarResult, setAvatarResult] = useState(null); // { modelUrl, renderedImageUrl }
+  const [errorMsg, setErrorMsg] = useState('');
+  // Crop editor state
+  const [pendingImageUri, setPendingImageUri] = useState(null);
+  const [cropVisible, setCropVisible]         = useState(false);
 
   const isLast = slide === SLIDES.length;
+
+  // ─── Image picker ────────────────────────────────────────────────────────────
+
+  async function pickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo library access to upload an image.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1, // full quality — we compress in the crop step
+    });
+
+    if (!result.canceled && result.assets?.[0]) {
+      setPendingImageUri(result.assets[0].uri);
+      setCropVisible(true);
+    }
+  }
+
+  function handleCropConfirm(croppedUri) {
+    setCropVisible(false);
+    setPendingImageUri(null);
+    setImageUri(croppedUri);
+    setGenState(STATE.IDLE);
+    setAvatarResult(null);
+    setErrorMsg('');
+  }
+
+  function handleCropCancel() {
+    setCropVisible(false);
+    setPendingImageUri(null);
+  }
+
+  // ─── Generate avatar ─────────────────────────────────────────────────────────
+
+  async function handleGenerate() {
+    if (!imageUri) {
+      Alert.alert('No image selected', 'Please upload a photo first.');
+      return;
+    }
+
+    setGenState(STATE.UPLOADING);
+    setProgress(0);
+    setErrorMsg('');
+
+    try {
+      const result = await generateAvatarFromImage(imageUri, (pct, status) => {
+        setProgress(pct);
+        if (status === 'running') setGenState(STATE.GENERATING);
+      });
+
+      console.log('[Onboarding] generation result:', JSON.stringify(result, null, 2));
+
+      setAvatarResult(result);
+      setGenState(STATE.DONE);
+
+      // Save avatar URLs to the user's profile in Supabase
+      if (authUser?.id) {
+        console.log('[Onboarding] saving to Supabase — avatar_url:', result.modelUrl, 'avatar_image_url:', result.renderedImageUrl);
+        await patchProfile({
+          avatar_url: result.modelUrl,
+          avatar_image_url: result.renderedImageUrl,
+        });
+        console.log('[Onboarding] patchProfile done');
+      } else {
+        console.warn('[Onboarding] no authUser.id — skipping Supabase save');
+      }
+    } catch (err) {
+      console.error('[Onboarding] generation/save error:', err);
+      setErrorMsg(err.message ?? 'Something went wrong. Please try again.');
+      setGenState(STATE.ERROR);
+    }
+  }
+
+  // ─── Derived UI helpers ──────────────────────────────────────────────────────
+
+  const isProcessing = genState === STATE.UPLOADING || genState === STATE.GENERATING;
+  const avatarSelected = imageUri !== null;
+
+  function uploadBoxContent() {
+    if (genState === STATE.DONE) {
+      return (
+        <>
+          {avatarResult?.renderedImageUrl ? (
+            <Image
+              source={{ uri: avatarResult.renderedImageUrl }}
+              style={styles.avatarPreviewImage}
+            />
+          ) : (
+            <Text style={styles.uploadIcon}>✅</Text>
+          )}
+          <Text style={styles.avatarPreviewText}>3D avatar ready!</Text>
+        </>
+      );
+    }
+    if (genState === STATE.ERROR) {
+      return (
+        <>
+          <Text style={styles.uploadIcon}>⚠️</Text>
+          <Text style={[styles.avatarPreviewText, { color: '#C0392B' }]}>Generation failed</Text>
+          <Text style={[styles.uploadSub, { color: '#C0392B', textAlign: 'center', paddingHorizontal: 12 }]}>
+            {errorMsg}
+          </Text>
+        </>
+      );
+    }
+    if (isProcessing) {
+      const label = genState === STATE.UPLOADING
+        ? 'Uploading image…'
+        : `Generating 3D model… ${progress}%`;
+      return (
+        <>
+          <ActivityIndicator size="large" color={GREEN} />
+          <Text style={styles.avatarPreviewText}>{label}</Text>
+        </>
+      );
+    }
+    if (imageUri) {
+      return (
+        <>
+          <Image source={{ uri: imageUri }} style={styles.avatarPreviewImage} />
+          <Text style={styles.avatarPreviewText}>Image selected</Text>
+          <Text style={styles.avatarPreviewSub}>Tap "Generate 3D Avatar" below</Text>
+        </>
+      );
+    }
+    return (
+      <>
+        <Text style={styles.uploadIcon}>📷</Text>
+        <Text style={styles.uploadText}>Tap to upload a photo</Text>
+        <Text style={styles.uploadSub}>Selfie, illustration, pet photo — anything works</Text>
+      </>
+    );
+  }
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -74,24 +233,32 @@ export default function OnboardingScreen({ navigation }) {
               Upload any image — a selfie, illustration, or cartoon character. We'll generate your unique 3D avatar using AI.
             </Text>
 
+            {/* Upload box */}
             <TouchableOpacity
               style={[styles.avatarUploadBox, avatarSelected && styles.avatarUploadBoxSelected]}
-              onPress={() => setAvatarSelected(true)}
+              onPress={isProcessing ? undefined : pickImage}
+              disabled={isProcessing}
             >
-              {avatarSelected ? (
-                <>
-                  <Text style={styles.avatarPreviewEmoji}>🧑‍💻</Text>
-                  <Text style={styles.avatarPreviewText}>Avatar selected!</Text>
-                  <Text style={styles.avatarPreviewSub}>AI is processing your 3D model…</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.uploadIcon}>📷</Text>
-                  <Text style={styles.uploadText}>Tap to upload a photo</Text>
-                  <Text style={styles.uploadSub}>Selfie, illustration, pet photo — anything works</Text>
-                </>
-              )}
+              {uploadBoxContent()}
             </TouchableOpacity>
+
+            {/* Error message */}
+            {genState === STATE.ERROR && (
+              <Text style={styles.errorText}>{errorMsg}</Text>
+            )}
+
+            {/* Generate button — shown after an image is picked, not yet done */}
+            {imageUri && genState !== STATE.DONE && (
+              <TouchableOpacity
+                style={[styles.primaryBtn, isProcessing && styles.btnDisabled]}
+                onPress={handleGenerate}
+                disabled={isProcessing}
+              >
+                <Text style={styles.primaryBtnText}>
+                  {isProcessing ? 'Processing…' : 'Generate 3D Avatar →'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Preview avatars */}
             <View style={styles.examplesRow}>
@@ -99,7 +266,7 @@ export default function OnboardingScreen({ navigation }) {
                 <TouchableOpacity
                   key={i}
                   style={styles.exampleAvatar}
-                  onPress={() => setAvatarSelected(true)}
+                  onPress={pickImage}
                 >
                   <Text style={styles.exampleEmoji}>{emoji}</Text>
                 </TouchableOpacity>
@@ -115,13 +282,23 @@ export default function OnboardingScreen({ navigation }) {
                 • Return borrowed items on time{'\n'}
                 • No spam, no harassment, no fake listings
               </Text>
-              <TouchableOpacity style={styles.agreeBtn} onPress={() => navigation.replace('Main')}>
+              <TouchableOpacity
+                style={styles.agreeBtn}
+                onPress={() => navigation.replace('Main')}
+              >
                 <Text style={styles.agreeBtnText}>I agree — Let me in! 🎉</Text>
               </TouchableOpacity>
             </View>
           </>
         )}
       </ScrollView>
+
+      <AvatarCropEditor
+        visible={cropVisible}
+        imageUri={pendingImageUri}
+        onConfirm={handleCropConfirm}
+        onCancel={handleCropCancel}
+      />
     </SafeAreaView>
   );
 }
@@ -165,6 +342,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  btnDisabled: { opacity: 0.6 },
   primaryBtnText: { ...typography.button, color: '#fff' },
   skipText: { ...typography.small, color: '#8A9A82', marginTop: 8 },
 
@@ -184,6 +362,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
     gap: 8,
+    overflow: 'hidden',
   },
   avatarUploadBoxSelected: {
     borderColor: GREEN,
@@ -192,9 +371,16 @@ const styles = StyleSheet.create({
   uploadIcon: { fontSize: 40 },
   uploadText: { ...typography.bodyBold, color: colors.textPrimary },
   uploadSub: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
-  avatarPreviewEmoji: { fontSize: 60 },
+  avatarPreviewImage: { width: 100, height: 100, borderRadius: 12 },
   avatarPreviewText: { ...typography.h4, color: GREEN_DARK },
   avatarPreviewSub: { ...typography.small, color: colors.textSecondary },
+
+  errorText: {
+    ...typography.small,
+    color: '#C0392B',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
 
   examplesRow: { flexDirection: 'row', gap: 12, marginBottom: 8 },
   exampleAvatar: {

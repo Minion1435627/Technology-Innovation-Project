@@ -186,7 +186,7 @@ export default function ProfileScreen({ navigation }) {
         {/* ---------- Profile card ---------- */}
         <View style={styles.profileCard}>
           <View style={styles.profileTop}>
-            <Avatar name={user.name} size={84} level={computedLevel} showBadge />
+            <Avatar name={user.name} size={84} level={computedLevel} showBadge imageUri={user.avatar_image_url ?? null} />
             <View style={styles.identity}>
               <View style={styles.nameRow}>
                 <Text style={styles.userName} numberOfLines={1}>{user.name}</Text>
