@@ -25,6 +25,59 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
     setTextureStatus('');
   }, [modelUrl]);
 
+  const simplifyMaterial = (mat) => {
+    if (!mat) return mat;
+
+    const next = new THREE.MeshPhongMaterial({
+      color: mat.color?.clone?.() ?? new THREE.Color(0xffffff),
+      map: mat.map ?? null,
+      transparent: !!mat.transparent || (typeof mat.opacity === 'number' && mat.opacity < 1),
+      opacity: typeof mat.opacity === 'number' ? mat.opacity : 1,
+      side: THREE.DoubleSide,
+    });
+
+    if (mat.emissive) {
+      next.emissive = mat.emissive.clone();
+    }
+    if (typeof mat.emissiveIntensity === 'number') {
+      next.emissiveIntensity = mat.emissiveIntensity;
+    }
+    if (mat.emissiveMap) {
+      next.emissiveMap = mat.emissiveMap;
+    }
+
+    if (next.map) {
+      if ('colorSpace' in next.map && THREE.SRGBColorSpace) {
+        next.map.colorSpace = THREE.SRGBColorSpace;
+      } else if ('encoding' in next.map && THREE.sRGBEncoding) {
+        next.map.encoding = THREE.sRGBEncoding;
+      }
+      next.map.flipY = false;
+      next.map.needsUpdate = true;
+    }
+    if (next.emissiveMap) {
+      if ('colorSpace' in next.emissiveMap && THREE.SRGBColorSpace) {
+        next.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+      } else if ('encoding' in next.emissiveMap && THREE.sRGBEncoding) {
+        next.emissiveMap.encoding = THREE.sRGBEncoding;
+      }
+      next.emissiveMap.flipY = false;
+      next.emissiveMap.needsUpdate = true;
+    }
+
+    next.needsUpdate = true;
+    next.skinning = !!mat.skinning;
+    return next;
+  };
+
+  const createFallbackMaterial = () =>
+    new THREE.MeshPhongMaterial({
+      color: new THREE.Color('#8fb37b'),
+      side: THREE.DoubleSide,
+      transparent: false,
+      opacity: 1,
+    });
+
   const loadGltfFromUrl = async (url) => {
     const response = await fetch(url);
     if (!response.ok) {
@@ -80,12 +133,6 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
 
     const clock = new THREE.Clock();
 
-    const origError = console.error;
-    console.error = (...args) => {
-      if (typeof args[0] === 'string' && args[0].startsWith('THREE.')) return;
-      origError(...args);
-    };
-
     try {
       const gltf = await loadGltfFromUrl(modelUrl);
       const model = gltf.scene;
@@ -104,7 +151,7 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
           }
           if (node.material) {
             const materials = Array.isArray(node.material) ? node.material : [node.material];
-            materials.forEach((mat) => {
+            const safeMaterials = materials.map((mat) => {
               if (!mat) return;
               mat.side = THREE.DoubleSide;
               if (typeof mat.opacity === 'number' && mat.opacity === 0) {
@@ -142,7 +189,9 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
                 }
               }
               mat.needsUpdate = true;
+              return simplifyMaterial(mat);
             });
+            node.material = Array.isArray(node.material) ? safeMaterials : safeMaterials[0];
           }
           node.castShadow = false;
           node.receiveShadow = false;
@@ -158,7 +207,19 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
       if (extraTextureCount > 0) statusParts.push(`Other maps (${extraTextureCount})`);
       if (vertexColorCount > 0) statusParts.push(`Vertex colors (${vertexColorCount})`);
       if (flatColorCount > 0) statusParts.push(`Flat color (${flatColorCount})`);
-      if (statusParts.length === 0) statusParts.push('No color source found');
+      const hasVisibleColorSource =
+        baseTextureCount > 0 || extraTextureCount > 0 || vertexColorCount > 0 || flatColorCount > 0;
+      if (!hasVisibleColorSource) {
+        statusParts.push('No color source found');
+        model.traverse((node) => {
+          if (!node.isMesh) return;
+          if (Array.isArray(node.material)) {
+            node.material = node.material.map(() => createFallbackMaterial());
+          } else {
+            node.material = createFallbackMaterial();
+          }
+        });
+      }
 
       const summary = statusParts.join(' • ');
       setTextureStatus(summary);
@@ -212,12 +273,10 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
       pivotRef.current = pivot;
       setStatus('ready');
     } catch (err) {
-      origError('[Avatar3D] load error:', err);
+      console.error('[Avatar3D] load error:', err);
       setErrorText(err?.message ?? String(err));
       setStatus('error');
       onLoadError?.(err);
-    } finally {
-      console.error = origError;
     }
 
     const animate = () => {

@@ -10,7 +10,7 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import Avatar3DViewer from '../components/Avatar3DViewer';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements } from '../lib/db';
+import { copyRemoteAvatarToStorage, fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements, getAvatarPublicUrl } from '../lib/db';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
@@ -114,11 +114,12 @@ export default function ProfileScreen({ navigation }) {
   const { chats } = useChats();
   const { profile, user: authUser, patchProfile } = useAuth();
   const user = profile;
+  const storedAvatarUrl = getAvatarPublicUrl(user?.avatar_storage_path);
   const previewSources = [
-    { key: 'auto', label: 'Auto', url: user?.avatar_animated_url || user?.avatar_texture_url || user?.avatar_url || null },
-    { key: 'base', label: 'Base', url: user?.avatar_url || null },
+    { key: 'auto', label: 'Auto', url: storedAvatarUrl || user?.avatar_animated_url || user?.avatar_texture_url || user?.avatar_url || null },
+    { key: 'base', label: 'Base', url: storedAvatarUrl || user?.avatar_url || null },
     { key: 'texture', label: 'Texture', url: user?.avatar_texture_url || null },
-    { key: 'animated', label: 'Animated', url: user?.avatar_animated_url || null },
+    { key: 'animated', label: 'Animated', url: user?.avatar_animated_url || storedAvatarUrl || null },
   ];
   const activeAvatarUrl = previewSources.find(source => source.key === previewMode)?.url ?? null;
   const availablePreviewSources = previewSources.filter(source => source.url);
@@ -252,8 +253,18 @@ export default function ProfileScreen({ navigation }) {
                 : user?.avatar_texture_url ? 'avatar_texture_url'
                   : 'avatar_url';
 
+      let stored = null;
+      if (authUser?.id) {
+        try {
+          stored = await copyRemoteAvatarToStorage(authUser.id, latest.modelUrl);
+        } catch (storageErr) {
+          console.warn('[Avatar3D] storage refresh fallback:', storageErr);
+        }
+      }
+
       await patchProfile({
-        [targetField]: latest.modelUrl,
+        [targetField]: stored?.publicUrl ?? latest.modelUrl,
+        avatar_storage_path: stored?.storagePath ?? user?.avatar_storage_path ?? null,
         avatar_image_url: latest.renderedImageUrl ?? user.avatar_image_url,
       });
     } catch (err) {
@@ -267,6 +278,18 @@ export default function ProfileScreen({ navigation }) {
     const message = err?.message ?? String(err);
     if (message.includes('403')) {
       refreshAvatarUrlFromTask();
+      return;
+    }
+
+    if (previewMode === 'texture') {
+      console.warn('[Avatar3D] texture preview failed, falling back to base');
+      setPreviewMode(user?.avatar_url ? 'base' : 'auto');
+      return;
+    }
+
+    if (previewMode === 'animated') {
+      console.warn('[Avatar3D] animated preview failed, falling back to base');
+      setPreviewMode(user?.avatar_url ? 'base' : 'auto');
     }
   };
 
@@ -293,16 +316,34 @@ export default function ProfileScreen({ navigation }) {
       const gen = await generateAvatarFromImage(uri, (pct, status, phase) => {
         setGenProgress(pct);
         if (status === 'running' || status === 'queued') setGenState(GEN_STATE.GENERATING);
-        setGenLabel('Generating 3D avatar…');
+        setGenLabel(phase === 'texturing' ? 'Adding colour to your avatar…' : 'Generating 3D avatar…');
       });
       setGenState(GEN_STATE.DONE);
+      let storedBase = null;
+      let storedTexture = null;
+      if (authUser?.id) {
+        try {
+          storedBase = await copyRemoteAvatarToStorage(authUser.id, gen.baseModelUrl ?? gen.modelUrl, `avatar-base-${Date.now()}.glb`);
+          if (gen.textureModelUrl) {
+            storedTexture = await copyRemoteAvatarToStorage(authUser.id, gen.textureModelUrl, `avatar-texture-${Date.now()}.glb`);
+          }
+        } catch (storageErr) {
+          console.warn('[Avatar3D] avatar storage fallback during generation:', storageErr?.message ?? String(storageErr));
+        }
+      }
       await patchProfile({
-        avatar_url: gen.baseModelUrl ?? gen.modelUrl,
-        avatar_texture_url: gen.textureModelUrl ?? null,
+        avatar_url: storedBase?.publicUrl ?? gen.baseModelUrl ?? gen.modelUrl,
+        avatar_storage_path: storedBase?.storagePath ?? null,
+        avatar_texture_url: storedTexture?.publicUrl ?? gen.textureModelUrl ?? null,
         avatar_animated_url: null,
         avatar_image_url: gen.renderedImageUrl,
         avatar_task_id: gen.taskId,
       });
+      console.log('[Avatar3D] saved profile urls:', JSON.stringify({
+        avatar_url: storedBase?.publicUrl ?? gen.baseModelUrl ?? gen.modelUrl,
+        avatar_storage_path: storedBase?.storagePath ?? null,
+        avatar_texture_url: storedTexture?.publicUrl ?? gen.textureModelUrl ?? null,
+      }, null, 2));
       setGenState(GEN_STATE.IDLE);
       setGenLabel('');
       setGenProgress(0);
@@ -331,8 +372,19 @@ export default function ProfileScreen({ navigation }) {
         throw new Error('The animation step did not return a usable 3D file.');
       }
 
+      let stored = null;
+      if (authUser?.id) {
+        try {
+          stored = await copyRemoteAvatarToStorage(authUser.id, result.modelUrl);
+        } catch (storageErr) {
+          console.warn('[Avatar3D] avatar storage fallback during animation:', storageErr?.message ?? String(storageErr));
+        }
+      }
+
       await patchProfile({
-        avatar_animated_url: result.modelUrl,
+        avatar_animated_url: stored?.publicUrl ?? result.modelUrl,
+        avatar_url: stored?.publicUrl ?? user.avatar_url,
+        avatar_storage_path: stored?.storagePath ?? user?.avatar_storage_path ?? null,
         avatar_image_url: result.renderedImageUrl ?? user.avatar_image_url,
         avatar_task_id: result.animatedTaskId,
       });

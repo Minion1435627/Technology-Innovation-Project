@@ -8,9 +8,11 @@ import AppNavigator from './src/navigation/AppNavigator';
 enableScreens();
 
 const EXGL_PIXEL_STORE_WARNING = "EXGL: gl.pixelStorei() doesn't support this parameter yet!";
+const GLTF_TEXTURE_WARNING = "THREE.GLTFLoader: Couldn't load texture";
 
 LogBox.ignoreLogs([
   EXGL_PIXEL_STORE_WARNING,
+  GLTF_TEXTURE_WARNING,
 ]);
 
 const originalConsoleLog = console.log;
@@ -23,18 +25,24 @@ function shouldIgnoreExglNoise(args) {
   );
 }
 
+function shouldIgnoreGltfTextureWarning(args) {
+  return args.some(
+    (arg) => typeof arg === 'string' && arg.includes(GLTF_TEXTURE_WARNING)
+  );
+}
+
 console.log = (...args) => {
   if (shouldIgnoreExglNoise(args)) return;
   originalConsoleLog(...args);
 };
 
 console.warn = (...args) => {
-  if (shouldIgnoreExglNoise(args)) return;
+  if (shouldIgnoreExglNoise(args) || shouldIgnoreGltfTextureWarning(args)) return;
   originalConsoleWarn(...args);
 };
 
 console.error = (...args) => {
-  if (shouldIgnoreExglNoise(args)) return;
+  if (shouldIgnoreExglNoise(args) || shouldIgnoreGltfTextureWarning(args)) return;
   originalConsoleError(...args);
 };
 

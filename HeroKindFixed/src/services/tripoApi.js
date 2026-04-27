@@ -216,16 +216,27 @@ export async function generateAvatarFromImage(imageUri, onProgress) {
   const taskId = await createImageTo3DTask(imageToken, fileType);
   onProgress?.(0, 'queued', 'generation');
   const baseModel = await waitForCompletion(taskId, (pct, status) => {
-    const scaledPct = Math.round(pct ?? 0);
+    const scaledPct = Math.round((pct ?? 0) * 0.55);
     onProgress?.(scaledPct, status, 'generation');
   });
 
+  onProgress?.(55, 'queued', 'texturing');
+  const texturedModel = await textureAvatarFromTask(taskId, {
+    image: {
+      type: fileType,
+      file_token: imageToken,
+    },
+  }, (pct, status) => {
+    const scaledPct = 55 + Math.round((pct ?? 0) * 0.45);
+    onProgress?.(scaledPct, status, 'texturing');
+  });
+
   return {
-    taskId,
-    modelUrl: baseModel.modelUrl,
+    taskId: texturedModel.taskId,
+    modelUrl: texturedModel.modelUrl ?? baseModel.modelUrl,
     baseModelUrl: baseModel.modelUrl,
-    textureModelUrl: null,
-    renderedImageUrl: baseModel.renderedImageUrl,
+    textureModelUrl: texturedModel.modelUrl ?? null,
+    renderedImageUrl: texturedModel.renderedImageUrl ?? baseModel.renderedImageUrl,
     sourceTaskId: taskId,
   };
 }
@@ -244,7 +255,7 @@ export async function textureAvatarFromTask(originalTaskId, texturePrompt, onPro
     type: 'texture_model',
     original_model_task_id: originalTaskId,
     texture: true,
-    pbr: true,
+    pbr: false,
     bake: true,
     texture_alignment: 'original_image',
     texture_quality: 'detailed',
