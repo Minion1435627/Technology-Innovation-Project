@@ -107,7 +107,7 @@ export default function ProfileScreen({ navigation }) {
   const [animateState, setAnimateState] = useState('idle');
   const [animateLabel, setAnimateLabel] = useState('');
   const [selectedAnimation, setSelectedAnimation] = useState('preset:idle');
-  const [previewMode, setPreviewMode] = useState('auto');
+  const [previewMode, setPreviewMode] = useState('preview');
   const [refreshingAvatarUrl, setRefreshingAvatarUrl] = useState(false);
   const { posts, removePost } = usePosts();
   const { friends } = useFriends();
@@ -116,13 +116,14 @@ export default function ProfileScreen({ navigation }) {
   const user = profile;
   const storedAvatarUrl = getAvatarPublicUrl(user?.avatar_storage_path);
   const previewSources = [
-    { key: 'auto', label: 'Auto', url: storedAvatarUrl || user?.avatar_animated_url || user?.avatar_texture_url || user?.avatar_url || null },
+    { key: 'preview', label: 'Preview', imageUrl: user?.avatar_image_url || null, url: null },
     { key: 'base', label: 'Base', url: storedAvatarUrl || user?.avatar_url || null },
-    { key: 'texture', label: 'Texture', url: user?.avatar_texture_url || null },
-    { key: 'animated', label: 'Animated', url: user?.avatar_animated_url || storedAvatarUrl || null },
+    { key: 'animated', label: 'Animated', url: user?.avatar_animated_url || null },
   ];
-  const activeAvatarUrl = previewSources.find(source => source.key === previewMode)?.url ?? null;
-  const availablePreviewSources = previewSources.filter(source => source.url);
+  const activePreviewSource = previewSources.find(source => source.key === previewMode) ?? previewSources[0];
+  const activeAvatarUrl = activePreviewSource?.url ?? null;
+  const activePreviewImageUrl = activePreviewSource?.imageUrl ?? null;
+  const availablePreviewSources = previewSources.filter(source => source.url || source.imageUrl);
 
   useEffect(() => {
     if (activeAvatarUrl && genState === GEN_STATE.DONE) {
@@ -134,10 +135,10 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => {
     const selectedSource = previewSources.find(source => source.key === previewMode);
-    if (!selectedSource?.url) {
-      setPreviewMode('auto');
+    if (!selectedSource?.url && !selectedSource?.imageUrl) {
+      setPreviewMode(user?.avatar_image_url ? 'preview' : 'base');
     }
-  }, [previewMode, user?.avatar_url, user?.avatar_texture_url, user?.avatar_animated_url]);
+  }, [previewMode, user?.avatar_url, user?.avatar_animated_url, user?.avatar_image_url]);
 
   useEffect(() => {
     if (!authUser?.id) return;
@@ -246,12 +247,7 @@ export default function ProfileScreen({ navigation }) {
       }
 
       const targetField =
-        previewMode === 'base' ? 'avatar_url'
-          : previewMode === 'texture' ? 'avatar_texture_url'
-            : previewMode === 'animated' ? 'avatar_animated_url'
-              : user?.avatar_animated_url ? 'avatar_animated_url'
-                : user?.avatar_texture_url ? 'avatar_texture_url'
-                  : 'avatar_url';
+        previewMode === 'animated' ? 'avatar_animated_url' : 'avatar_url';
 
       let stored = null;
       if (authUser?.id) {
@@ -281,15 +277,9 @@ export default function ProfileScreen({ navigation }) {
       return;
     }
 
-    if (previewMode === 'texture') {
-      console.warn('[Avatar3D] texture preview failed, falling back to base');
-      setPreviewMode(user?.avatar_url ? 'base' : 'auto');
-      return;
-    }
-
     if (previewMode === 'animated') {
       console.warn('[Avatar3D] animated preview failed, falling back to base');
-      setPreviewMode(user?.avatar_url ? 'base' : 'auto');
+      setPreviewMode(user?.avatar_url ? 'base' : 'preview');
     }
   };
 
@@ -383,8 +373,6 @@ export default function ProfileScreen({ navigation }) {
 
       await patchProfile({
         avatar_animated_url: stored?.publicUrl ?? result.modelUrl,
-        avatar_url: stored?.publicUrl ?? user.avatar_url,
-        avatar_storage_path: stored?.storagePath ?? user?.avatar_storage_path ?? null,
         avatar_image_url: result.renderedImageUrl ?? user.avatar_image_url,
         avatar_task_id: result.animatedTaskId,
       });
@@ -477,13 +465,18 @@ export default function ProfileScreen({ navigation }) {
 
         {/* ---------- 3D Avatar ---------- */}
         <View style={styles.avatarBannerWrap} {...avatarPanResponder.panHandlers}>
-          {activeAvatarUrl && genState === GEN_STATE.IDLE ? (
+          {previewMode === 'preview' && activePreviewImageUrl && genState === GEN_STATE.IDLE ? (
+            <View style={[styles.avatarBanner, styles.avatarPreviewPanel]}>
+              <Image source={{ uri: activePreviewImageUrl }} style={styles.avatarPreviewHero} />
+            </View>
+          ) : activeAvatarUrl && genState === GEN_STATE.IDLE ? (
             <Avatar3DViewer
-              key={activeAvatarUrl}
+              key={`${activeAvatarUrl}:${previewMode === 'animated' ? 'animated' : 'still'}`}
               modelUrl={activeAvatarUrl}
               rotation={modelRotation}
               style={styles.avatarBanner}
               onLoadError={handleAvatarLoadError}
+              playAnimation={previewMode === 'animated'}
             />
           ) : isGenerating ? (
             <View style={[styles.avatarBanner, styles.avatarBannerCenter]}>
@@ -527,10 +520,10 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.avatarSubHint}>Refreshing avatar file…</Text>
         ) : null}
 
-        {/* Rotation controls + change button — shown only when avatar exists */}
-        {activeAvatarUrl && genState === GEN_STATE.IDLE && (
+        {/* View mode controls */}
+        {availablePreviewSources.length > 0 && genState === GEN_STATE.IDLE && (
           <View style={styles.avatarControls}>
-            <Text style={styles.motionLabel}>Preview source</Text>
+            <Text style={styles.motionLabel}>View mode</Text>
             <View style={styles.animationPicker}>
               {availablePreviewSources.map((source) => {
                 const selected = previewMode === source.key;
@@ -548,23 +541,25 @@ export default function ProfileScreen({ navigation }) {
                 );
               })}
             </View>
-            <View style={styles.rotationButtons}>
-              <TouchableOpacity
-                style={styles.rotateBtn}
-                onPress={() => rotateByStep(-ROTATION_STEP)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={styles.rotateBtnHint}>{getRotationLabel(modelRotation)}°</Text>
-              <TouchableOpacity
-                style={styles.rotateBtn}
-                onPress={() => rotateByStep(ROTATION_STEP)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
+            {previewMode !== 'preview' && activeAvatarUrl ? (
+              <View style={styles.rotationButtons}>
+                <TouchableOpacity
+                  style={styles.rotateBtn}
+                  onPress={() => rotateByStep(-ROTATION_STEP)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
+                </TouchableOpacity>
+                <Text style={styles.rotateBtnHint}>{getRotationLabel(modelRotation)}°</Text>
+                <TouchableOpacity
+                  style={styles.rotateBtn}
+                  onPress={() => rotateByStep(ROTATION_STEP)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            ) : null}
             <Text style={styles.motionLabel}>Choose a motion</Text>
             <View style={styles.animationPicker}>
               {ANIMATION_OPTIONS.map((option) => {
@@ -945,6 +940,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1.5, borderColor: colors.border,
     overflow: 'hidden',
+  },
+  avatarPreviewPanel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  avatarPreviewHero: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
   },
   avatarBannerCenter: {
     alignItems: 'center', justifyContent: 'center', gap: 10,

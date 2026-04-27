@@ -5,7 +5,7 @@ import { Renderer } from 'expo-three';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 
-export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadError }) {
+export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadError, playAnimation = true }) {
   const [status, setStatus] = useState('loading');
   const [errorText, setErrorText] = useState('');
   const [textureStatus, setTextureStatus] = useState('');
@@ -264,7 +264,7 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
       floor.position.y = fittedBox.min.y - 0.02;
       scene.add(floor);
 
-      if (gltf.animations?.length) {
+      if (playAnimation && gltf.animations?.length) {
         const mixer = new THREE.AnimationMixer(model);
         mixer.clipAction(gltf.animations[0]).play();
         mixerRef.current = mixer;
