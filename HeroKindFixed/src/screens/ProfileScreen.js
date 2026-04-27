@@ -15,7 +15,7 @@ import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
-import { animateAvatarFromTask, generateAvatarFromImage } from '../services/tripoApi';
+import { animateAvatarFromTask, generateAvatarFromImage, getTaskOutputUrls } from '../services/tripoApi';
 
 const GEN_STATE = { IDLE: 'idle', UPLOADING: 'uploading', GENERATING: 'generating', DONE: 'done', ERROR: 'error' };
 
@@ -108,6 +108,7 @@ export default function ProfileScreen({ navigation }) {
   const [animateLabel, setAnimateLabel] = useState('');
   const [selectedAnimation, setSelectedAnimation] = useState('preset:idle');
   const [previewMode, setPreviewMode] = useState('auto');
+  const [refreshingAvatarUrl, setRefreshingAvatarUrl] = useState(false);
   const { posts, removePost } = usePosts();
   const { friends } = useFriends();
   const { chats } = useChats();
@@ -232,6 +233,43 @@ export default function ProfileScreen({ navigation }) {
 
   const isGenerating = genState === GEN_STATE.UPLOADING || genState === GEN_STATE.GENERATING;
 
+  const refreshAvatarUrlFromTask = async () => {
+    if (!user?.avatar_task_id || refreshingAvatarUrl) return;
+
+    try {
+      setRefreshingAvatarUrl(true);
+      const latest = await getTaskOutputUrls(user.avatar_task_id);
+
+      if (!latest.modelUrl) {
+        throw new Error('The latest avatar file is not available yet.');
+      }
+
+      const targetField =
+        previewMode === 'base' ? 'avatar_url'
+          : previewMode === 'texture' ? 'avatar_texture_url'
+            : previewMode === 'animated' ? 'avatar_animated_url'
+              : user?.avatar_animated_url ? 'avatar_animated_url'
+                : user?.avatar_texture_url ? 'avatar_texture_url'
+                  : 'avatar_url';
+
+      await patchProfile({
+        [targetField]: latest.modelUrl,
+        avatar_image_url: latest.renderedImageUrl ?? user.avatar_image_url,
+      });
+    } catch (err) {
+      console.warn('[Avatar3D] failed to refresh signed URL:', err);
+    } finally {
+      setRefreshingAvatarUrl(false);
+    }
+  };
+
+  const handleAvatarLoadError = (err) => {
+    const message = err?.message ?? String(err);
+    if (message.includes('403')) {
+      refreshAvatarUrlFromTask();
+    }
+  };
+
   const pickAndGenerate = async () => {
     if (isGenerating) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -255,7 +293,7 @@ export default function ProfileScreen({ navigation }) {
       const gen = await generateAvatarFromImage(uri, (pct, status, phase) => {
         setGenProgress(pct);
         if (status === 'running' || status === 'queued') setGenState(GEN_STATE.GENERATING);
-        setGenLabel(phase === 'texturing' ? 'Adding colour to your avatar…' : 'Generating 3D avatar…');
+        setGenLabel('Generating 3D avatar…');
       });
       setGenState(GEN_STATE.DONE);
       await patchProfile({
@@ -296,6 +334,7 @@ export default function ProfileScreen({ navigation }) {
       await patchProfile({
         avatar_animated_url: result.modelUrl,
         avatar_image_url: result.renderedImageUrl ?? user.avatar_image_url,
+        avatar_task_id: result.animatedTaskId,
       });
 
       setAnimateState('idle');
@@ -392,6 +431,7 @@ export default function ProfileScreen({ navigation }) {
               modelUrl={activeAvatarUrl}
               rotation={modelRotation}
               style={styles.avatarBanner}
+              onLoadError={handleAvatarLoadError}
             />
           ) : isGenerating ? (
             <View style={[styles.avatarBanner, styles.avatarBannerCenter]}>
@@ -431,6 +471,9 @@ export default function ProfileScreen({ navigation }) {
           )}
         </View>
         <Text style={styles.avatarHint}>Drag the avatar or use the arrows to turn left and right.</Text>
+        {refreshingAvatarUrl ? (
+          <Text style={styles.avatarSubHint}>Refreshing avatar file…</Text>
+        ) : null}
 
         {/* Rotation controls + change button — shown only when avatar exists */}
         {activeAvatarUrl && genState === GEN_STATE.IDLE && (
@@ -863,6 +906,13 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     marginTop: 8,
+    marginHorizontal: 24,
+  },
+  avatarSubHint: {
+    ...typography.caption,
+    color: colors.primary,
+    textAlign: 'center',
+    marginTop: 4,
     marginHorizontal: 24,
   },
   avatarActionRow: {

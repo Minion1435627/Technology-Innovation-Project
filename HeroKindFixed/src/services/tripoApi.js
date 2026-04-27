@@ -13,6 +13,7 @@
 
 const BASE_URL = 'https://api.tripo3d.ai/v2/openapi';
 const API_KEY = process.env.EXPO_PUBLIC_TRIPO_API_KEY ?? '';
+const UPLOAD_TIMEOUT_MS = 90_000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,18 +53,33 @@ async function parseResponse(response) {
  * @returns {Promise<string>} image_token to use when creating a task
  */
 export async function uploadImage(imageUri) {
-  const filename = imageUri.split('/').pop() ?? 'avatar.jpg';
-  const ext = filename.split('.').pop().toLowerCase();
-  const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+  const originalFilename = imageUri.split('/').pop() ?? 'avatar.jpg';
+  const lowerName = originalFilename.toLowerCase();
+  const mimeType = lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg';
+  const uploadName = mimeType === 'image/png' ? 'avatar.png' : 'avatar.jpg';
 
   const form = new FormData();
-  form.append('file', { uri: imageUri, name: filename, type: mimeType });
+  form.append('file', { uri: imageUri, name: uploadName, type: mimeType });
 
-  const response = await fetch(`${BASE_URL}/upload`, {
-    method: 'POST',
-    headers: authHeaders(),   // Content-Type set automatically for FormData
-    body: form,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}/upload`, {
+      method: 'POST',
+      headers: authHeaders(),   // Content-Type set automatically for FormData
+      body: form,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Uploading photo timed out. Please try a smaller image or try again.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const data = await parseResponse(response);
   return data.image_token;
@@ -116,6 +132,20 @@ export async function getTaskStatus(taskId) {
   });
 
   return parseResponse(response);
+}
+
+export async function getTaskOutputUrls(taskId) {
+  if (!taskId) {
+    throw new Error('Missing avatar task id.');
+  }
+
+  const task = await getTaskStatus(taskId);
+  return {
+    taskId,
+    status: task.status,
+    modelUrl: extractModelUrl(task.output),
+    renderedImageUrl: extractFileUrl(task.output?.rendered_image),
+  };
 }
 
 /**
@@ -186,27 +216,16 @@ export async function generateAvatarFromImage(imageUri, onProgress) {
   const taskId = await createImageTo3DTask(imageToken, fileType);
   onProgress?.(0, 'queued', 'generation');
   const baseModel = await waitForCompletion(taskId, (pct, status) => {
-    const scaledPct = Math.round((pct ?? 0) * 0.55);
+    const scaledPct = Math.round(pct ?? 0);
     onProgress?.(scaledPct, status, 'generation');
   });
 
-  onProgress?.(55, 'queued', 'texturing');
-  const texturedModel = await textureAvatarFromTask(taskId, {
-    image: {
-      type: fileType,
-      file_token: imageToken,
-    },
-  }, (pct, status) => {
-    const scaledPct = 55 + Math.round((pct ?? 0) * 0.45);
-    onProgress?.(scaledPct, status, 'texturing');
-  });
-
   return {
-    taskId: texturedModel.taskId,
-    modelUrl: texturedModel.modelUrl ?? baseModel.modelUrl,
+    taskId,
+    modelUrl: baseModel.modelUrl,
     baseModelUrl: baseModel.modelUrl,
-    textureModelUrl: texturedModel.modelUrl ?? null,
-    renderedImageUrl: texturedModel.renderedImageUrl ?? baseModel.renderedImageUrl,
+    textureModelUrl: null,
+    renderedImageUrl: baseModel.renderedImageUrl,
     sourceTaskId: taskId,
   };
 }

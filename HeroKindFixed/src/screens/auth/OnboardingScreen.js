@@ -110,7 +110,7 @@ export default function OnboardingScreen({ navigation }) {
       const result = await generateAvatarFromImage(imageUri, (pct, status, phase) => {
         setProgress(pct);
         if (status === 'running' || status === 'queued') setGenState(STATE.GENERATING);
-        setGenLabel(phase === 'texturing' ? 'Adding colour…' : 'Generating 3D model…');
+        setGenLabel('Generating 3D model…');
       });
 
       console.log('[Onboarding] generation result:', JSON.stringify(result, null, 2));

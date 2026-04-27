@@ -1,10 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { GLView } from 'expo-gl';
-import { Renderer, loadAsync } from 'expo-three';
+import { Renderer } from 'expo-three';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 
-export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
+export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadError }) {
   const [status, setStatus] = useState('loading');
   const [errorText, setErrorText] = useState('');
   const [textureStatus, setTextureStatus] = useState('');
@@ -23,6 +24,25 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
     setErrorText('');
     setTextureStatus('');
   }, [modelUrl]);
+
+  const loadGltfFromUrl = async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Avatar download failed (${response.status})`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const loader = new GLTFLoader();
+
+    return await new Promise((resolve, reject) => {
+      loader.parse(
+        arrayBuffer,
+        '',
+        (gltf) => resolve(gltf),
+        (error) => reject(error instanceof Error ? error : new Error(String(error)))
+      );
+    });
+  };
 
   const onContextCreate = async (gl) => {
     const renderer = new Renderer({ gl });
@@ -67,7 +87,7 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
     };
 
     try {
-      const gltf = await loadAsync(modelUrl);
+      const gltf = await loadGltfFromUrl(modelUrl);
       const model = gltf.scene;
 
       let meshCount = 0;
@@ -195,6 +215,7 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style }) {
       origError('[Avatar3D] load error:', err);
       setErrorText(err?.message ?? String(err));
       setStatus('error');
+      onLoadError?.(err);
     } finally {
       console.error = origError;
     }
