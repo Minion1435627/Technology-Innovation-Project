@@ -131,7 +131,7 @@ function getChatPriority(chat) {
 }
 
 export default function ChatListScreen({ navigation }) {
-  const { chats } = useChats();
+  const { chats, activeExchangeCount } = useChats();
   const enhancedChats = useMemo(() => {
     const getChatDedupeKey = (chat) => {
       const userId = chat.user?.id ? String(chat.user.id) : '';
@@ -170,8 +170,8 @@ export default function ChatListScreen({ navigation }) {
       });
   }, [chats]);
 
-  const activeCount = enhancedChats.filter(chat => chat.exchange).length;
-  const unreadCount = enhancedChats.filter(chat => chat.unread > 0).length;
+  const activeCount = activeExchangeCount;
+  const unreadCount = enhancedChats.reduce((sum, chat) => sum + (chat.unread ?? 0), 0);
 
   const renderChatRow = ({ item }) => {
     const exchange = item.exchange;
@@ -181,7 +181,11 @@ export default function ChatListScreen({ navigation }) {
 
     return (
       <TouchableOpacity
-        style={[styles.chatCard, isUrgent && styles.chatCardUrgent]}
+        style={[
+          styles.chatCard,
+          isUrgent && styles.chatCardUrgent,
+          item.unread > 0 && styles.chatCardUnread,
+        ]}
         activeOpacity={0.9}
         onPress={() => navigation.navigate('ChatDetail', { chat: item })}
       >
@@ -368,6 +372,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 2,
+  },
+  chatCardUnread: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+    backgroundColor: colors.card,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 3,
   },
   avatarWrapper: { position: 'relative' },
   unreadDot: {

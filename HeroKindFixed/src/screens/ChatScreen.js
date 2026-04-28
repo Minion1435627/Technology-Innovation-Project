@@ -10,7 +10,7 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
 import { useChats } from '../context/ChatContext';
-import { fetchMessages, sendMessage as dbSendMessage, createTransaction, updateTransaction, updateTransactionStatus, createChatWithPost, fetchTransactionById, fetchTransactionByChat, fetchTransactionsByChat, deletePendingTransactionsByChat, deletePendingTransactionById, createNotification } from '../lib/db';
+import { fetchMessages, sendMessage as dbSendMessage, createTransaction, updateTransaction, updateTransactionStatus, createChatWithPost, fetchTransactionById, fetchTransactionByChat, fetchTransactionsByChat, deletePendingTransactionsByChat, deletePendingTransactionById, createNotification, markMessagesRead } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { usePosts } from '../context/PostsContext';
@@ -456,7 +456,7 @@ const EXCHANGE_STATUS_CONFIG = {
 };
 
 export default function ChatScreen({ navigation, route }) {
-  const { chats, addChat, updateLastMessage, refreshChatExchange } = useChats();
+  const { chats, addChat, updateLastMessage, markChatSeen, refreshChatExchange } = useChats();
   const { user, profile } = useAuth();
   const { posts } = usePosts();
   const [input, setInput] = useState('');
@@ -643,11 +643,14 @@ export default function ChatScreen({ navigation, route }) {
       sender: m.sender_id === user?.id ? 'me' : 'them',
       text: m.text,
       time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      read: true,
+      read: !!m.read_at,
     });
 
-    fetchMessages(dbChatId).then(rows => {
+    fetchMessages(dbChatId).then(async rows => {
       setMessages(rows.map(mapMsg));
+      if (user?.id) {
+        await markMessagesRead(dbChatId, user.id);
+      }
       setTimeout(() => scrollToLatest(false), 100);
     });
 
@@ -667,6 +670,18 @@ export default function ChatScreen({ navigation, route }) {
 
     return () => supabase.removeChannel(channel);
   }, [dbChatId, user?.id]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const chatId = dbChatId ?? effectiveChatId;
+      if (chatId) {
+        markChatSeen(chatId);
+        if (user?.id && isDbChatId(chatId)) {
+          markMessagesRead(chatId, user.id);
+        }
+      }
+    }, [dbChatId, effectiveChatId, markChatSeen, user?.id])
+  );
   const [exchange, setExchange] = useState(
     isDbChatId(chat?.id) ? null : (chat?.exchange ?? (chat?.id ? EXCHANGE_META[chat.id] ?? null : null))
   );
@@ -1558,6 +1573,8 @@ export default function ChatScreen({ navigation, route }) {
     };
     setMessages(prev => [...prev, newMsg]);
     setInput('');
+    setTimeout(() => scrollToLatest(true), 60);
+    setTimeout(() => scrollToLatest(false), 180);
 
     if (!user?.id) return;
 
@@ -1589,6 +1606,12 @@ export default function ChatScreen({ navigation, route }) {
       if (chatId) {
         refreshChatExchange(chatId, chatPostId);
       }
+      const t1 = setTimeout(() => scrollToLatest(false), 80);
+      const t2 = setTimeout(() => scrollToLatest(false), 220);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }, [dbChatId, effectiveChatId, refreshChatExchange, chatPostId])
   );
 

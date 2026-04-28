@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { fetchChats, fetchTransactionByChat, fetchTransactionsByChat } from '../lib/db';
+import { fetchChats, fetchTransactionByChat, fetchTransactionsByChat, fetchUnreadNotifications, fetchUnreadMessageCounts } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
 const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', overdue: 'Overdue', disputed: 'Disputed' };
+const ACTIVE_EXCHANGE_STATES = new Set(['pending', 'in_progress', 'overdue', 'disputed']);
 
 function pendingRoleFromTx(tx) {
   if (!tx?.pending_by_user_id) return null;
@@ -37,6 +38,7 @@ const ChatContext = createContext(null);
 
 export function ChatProvider({ children }) {
   const [chats, setChats] = useState([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const { user } = useAuth();
 
   const getChatDedupeKey = (row) => {
@@ -67,7 +69,11 @@ export function ChatProvider({ children }) {
 
   useEffect(() => {
     if (!user?.id) return;
-    fetchChats(user.id).then(async rows => {
+    Promise.all([
+      fetchChats(user.id),
+      fetchUnreadNotifications(user.id),
+      fetchUnreadMessageCounts(user.id),
+    ]).then(async ([rows, unreadNotifications, unreadCounts]) => {
       const mapped = await Promise.all(rows.map(async row => {
         const other = row.user1_id === user.id ? row.user2 : row.user1;
         const tx = await fetchTransactionByChat(row.id);
@@ -92,11 +98,12 @@ export function ChatProvider({ children }) {
           postOwnerId: latestTask?.post?.user_id ?? row.post?.user_id ?? null,
           postCategory: latestTask?.post?.category ?? row.post?.category ?? null,
           postTitle: latestTask?.post?.title ?? row.post?.title ?? row.post_title ?? 'Direct message',
-          unread: 0,
+          unread: unreadCounts?.[row.id] ?? 0,
           exchange,
         };
       }));
       setChats(dedupeChatsByUser(mapped));
+      setUnreadNotificationsCount(unreadNotifications.length);
     });
   }, [user?.id]);
 
@@ -124,6 +131,72 @@ export function ChatProvider({ children }) {
     return () => supabase.removeChannel(channel);
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`messages_watch_${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'HelpMate',
+        table: 'messages',
+      }, ({ eventType, new: message, old: oldMessage }) => {
+        const targetChatId = message?.chat_id ?? oldMessage?.chat_id;
+        if (!targetChatId) return;
+
+        if (eventType === 'UPDATE') {
+          const becameRead = oldMessage?.read_at == null && message?.read_at != null;
+          if (!becameRead) return;
+
+          setChats(prev => dedupeChatsByUser(prev.map(chat => {
+            if (chat.id !== targetChatId) return chat;
+            return {
+              ...chat,
+              unread: Math.max((chat.unread ?? 0) - 1, 0),
+            };
+          })));
+          return;
+        }
+
+        if (!message?.chat_id) return;
+
+        setChats(prev => dedupeChatsByUser(prev.map(chat => {
+          if (chat.id !== message.chat_id) return chat;
+
+          const isIncoming = message.sender_id !== user.id;
+          return {
+            ...chat,
+            lastMessage: message.text ?? chat.lastMessage,
+            rawLastMessageAt: message.created_at ?? chat.rawLastMessageAt,
+            time: message.created_at
+              ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : chat.time,
+            unread: isIncoming && !message.read_at ? (chat.unread ?? 0) + 1 : chat.unread ?? 0,
+          };
+        })));
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`notifications_watch_${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'HelpMate',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`,
+      }, async () => {
+        const unreadNotifications = await fetchUnreadNotifications(user.id);
+        setUnreadNotificationsCount(unreadNotifications.length);
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [user?.id]);
+
   const addChat = (newChat) => {
     setChats(prev => {
       if (prev.some(c => c.user?.id === newChat.user?.id)) return prev;
@@ -135,6 +208,19 @@ export function ChatProvider({ children }) {
     setChats(prev =>
       prev.map(c => c.id === chatId ? { ...c, lastMessage: text, time, rawLastMessageAt: new Date().toISOString() } : c)
     );
+  };
+
+  const markChatSeen = (chatId) => {
+    if (!chatId) return;
+    setChats(prev => {
+      const target = prev.find(chat => chat.id === chatId);
+      if (!target || !target.unread) return prev;
+      return prev.map(chat =>
+        chat.id === chatId
+          ? { ...chat, unread: 0 }
+          : chat
+      );
+    });
   };
 
   const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -149,8 +235,20 @@ export function ChatProvider({ children }) {
     ));
   };
 
+  const activeExchangeCount = dedupeChatsByUser(chats).filter(chat =>
+    ACTIVE_EXCHANGE_STATES.has(chat.exchange?.state)
+  ).length;
+
   return (
-    <ChatContext.Provider value={{ chats, addChat, updateLastMessage, refreshChatExchange }}>
+    <ChatContext.Provider value={{
+      chats,
+      addChat,
+      updateLastMessage,
+      markChatSeen,
+      refreshChatExchange,
+      unreadNotificationsCount,
+      activeExchangeCount,
+    }}>
       {children}
     </ChatContext.Provider>
   );

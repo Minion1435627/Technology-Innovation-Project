@@ -306,6 +306,37 @@ export async function fetchMessages(chatId) {
   return data ?? [];
 }
 
+export async function fetchUnreadMessageCounts(userId) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('chat_id')
+    .neq('sender_id', userId)
+    .is('read_at', null);
+
+  if (error) {
+    console.error('fetchUnreadMessageCounts:', error.message);
+    return {};
+  }
+
+  return (data ?? []).reduce((acc, row) => {
+    if (!row?.chat_id) return acc;
+    acc[row.chat_id] = (acc[row.chat_id] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
+export async function markMessagesRead(chatId, userId) {
+  const { error } = await supabase
+    .from('messages')
+    .update({ read_at: new Date().toISOString() })
+    .eq('chat_id', chatId)
+    .neq('sender_id', userId)
+    .is('read_at', null);
+
+  if (error) console.error('markMessagesRead:', error.message);
+  return !error;
+}
+
 export async function sendMessage(chatId, senderId, text) {
   const { error: msgError } = await supabase
     .from('messages')
@@ -319,6 +350,61 @@ export async function sendMessage(chatId, senderId, text) {
 
   if (msgError) console.error('sendMessage:', msgError.message);
   return !msgError;
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+export async function fetchUnreadNotifications(userId) {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_read', false)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('fetchUnreadNotifications:', error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+export async function markNotificationRead(notificationId) {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('id', notificationId);
+  if (error) console.error('markNotificationRead:', error.message);
+  return !error;
+}
+
+export async function createNotification({
+  userId,
+  type,
+  title,
+  body,
+  actorId = null,
+  referenceId = null,
+  referenceType = null,
+}) {
+  const { error } = await supabase
+    .from('notifications')
+    .insert({
+      user_id: userId,
+      type,
+      title,
+      body,
+      actor_id: actorId,
+      reference_id: referenceId,
+      reference_type: referenceType,
+      is_read: false,
+    });
+
+  if (error) {
+    console.error('createNotification:', error.message);
+    return { ok: false, errorMessage: error.message };
+  }
+
+  return { ok: true, errorMessage: null };
 }
 
 
