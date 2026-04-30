@@ -10,7 +10,7 @@ import { typography } from '../../theme/typography';
 import { generateAvatarFromImage } from '../../services/tripoApi';
 import AvatarCropEditor from '../../components/AvatarCropEditor';
 import { useAuth } from '../../context/AuthContext';
-import { copyRemoteAvatarToStorage } from '../../lib/db';
+import { copyRemoteAvatarImageToStorage, copyRemoteAvatarToStorage } from '../../lib/db';
 
 // Match CoverScreen palette
 const GREEN       = '#86A778';
@@ -123,27 +123,32 @@ export default function OnboardingScreen({ navigation }) {
       if (authUser?.id) {
         let storedBase = null;
         let storedTexture = null;
+        let storedImage = null;
         try {
           storedBase = await copyRemoteAvatarToStorage(authUser.id, result.baseModelUrl ?? result.modelUrl, `avatar-base-${Date.now()}.glb`);
           if (result.textureModelUrl) {
             storedTexture = await copyRemoteAvatarToStorage(authUser.id, result.textureModelUrl, `avatar-texture-${Date.now()}.glb`);
           }
+          if (result.renderedImageUrl) {
+            storedImage = await copyRemoteAvatarImageToStorage(authUser.id, result.renderedImageUrl, `avatar-preview-${Date.now()}.png`);
+          }
         } catch (storageErr) {
           console.warn('[Onboarding] avatar storage fallback:', storageErr?.message ?? String(storageErr));
         }
-        console.log('[Onboarding] saving to Supabase — avatar_url:', storedBase?.publicUrl ?? result.modelUrl, 'avatar_image_url:', result.renderedImageUrl);
+        console.log('[Onboarding] saving to Supabase — avatar_url:', storedBase?.publicUrl ?? result.modelUrl, 'avatar_image_url:', storedImage?.publicUrl ?? result.renderedImageUrl);
         await patchProfile({
           avatar_url: storedBase?.publicUrl ?? result.baseModelUrl ?? result.modelUrl,
           avatar_storage_path: storedBase?.storagePath ?? null,
           avatar_texture_url: storedTexture?.publicUrl ?? result.textureModelUrl ?? null,
           avatar_animated_url: null,
-          avatar_image_url: result.renderedImageUrl,
+          avatar_image_url: storedImage?.publicUrl ?? result.renderedImageUrl,
           avatar_task_id: result.taskId,
         });
         console.log('[Onboarding] saved profile urls:', JSON.stringify({
           avatar_url: storedBase?.publicUrl ?? result.baseModelUrl ?? result.modelUrl,
           avatar_storage_path: storedBase?.storagePath ?? null,
           avatar_texture_url: storedTexture?.publicUrl ?? result.textureModelUrl ?? null,
+          avatar_image_url: storedImage?.publicUrl ?? result.renderedImageUrl,
         }, null, 2));
         console.log('[Onboarding] patchProfile done');
       } else {

@@ -37,6 +37,39 @@ export async function copyRemoteAvatarToStorage(userId, remoteUrl, filename = `a
   };
 }
 
+export async function copyRemoteAvatarImageToStorage(userId, remoteUrl, filename = `avatar-preview-${Date.now()}.png`) {
+  if (!userId) throw new Error('Missing user id for avatar image storage.');
+  if (!remoteUrl) throw new Error('Missing remote avatar image URL.');
+
+  const response = await fetch(remoteUrl);
+  if (!response.ok) {
+    throw new Error(`Avatar image download failed (${response.status})`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const lowerName = filename.toLowerCase();
+  const contentType = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')
+    ? 'image/jpeg'
+    : 'image/png';
+  const storagePath = `users/${userId}/${filename}`;
+
+  const { error } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(storagePath, arrayBuffer, {
+      contentType,
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(`Supabase avatar image upload failed: ${error.message}`);
+  }
+
+  return {
+    storagePath,
+    publicUrl: getAvatarPublicUrl(storagePath),
+  };
+}
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export async function fetchUserProfile(userId) {

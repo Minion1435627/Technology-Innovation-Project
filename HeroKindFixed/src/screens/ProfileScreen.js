@@ -10,7 +10,7 @@ import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import Avatar3DViewer from '../components/Avatar3DViewer';
 import { Ionicons } from '@expo/vector-icons';
-import { copyRemoteAvatarToStorage, fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements, getAvatarPublicUrl } from '../lib/db';
+import { copyRemoteAvatarImageToStorage, copyRemoteAvatarToStorage, fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements, getAvatarPublicUrl } from '../lib/db';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
@@ -250,9 +250,13 @@ export default function ProfileScreen({ navigation }) {
         previewMode === 'animated' ? 'avatar_animated_url' : 'avatar_url';
 
       let stored = null;
+      let storedImage = null;
       if (authUser?.id) {
         try {
           stored = await copyRemoteAvatarToStorage(authUser.id, latest.modelUrl);
+          if (latest.renderedImageUrl) {
+            storedImage = await copyRemoteAvatarImageToStorage(authUser.id, latest.renderedImageUrl, `avatar-preview-${Date.now()}.png`);
+          }
         } catch (storageErr) {
           console.warn('[Avatar3D] storage refresh fallback:', storageErr);
         }
@@ -261,7 +265,7 @@ export default function ProfileScreen({ navigation }) {
       await patchProfile({
         [targetField]: stored?.publicUrl ?? latest.modelUrl,
         avatar_storage_path: stored?.storagePath ?? user?.avatar_storage_path ?? null,
-        avatar_image_url: latest.renderedImageUrl ?? user.avatar_image_url,
+        avatar_image_url: storedImage?.publicUrl ?? latest.renderedImageUrl ?? user.avatar_image_url,
       });
     } catch (err) {
       console.warn('[Avatar3D] failed to refresh signed URL:', err);
@@ -280,6 +284,17 @@ export default function ProfileScreen({ navigation }) {
     if (previewMode === 'animated') {
       console.warn('[Avatar3D] animated preview failed, falling back to base');
       setPreviewMode(user?.avatar_url ? 'base' : 'preview');
+    }
+  };
+
+  const handlePreviewImageError = () => {
+    console.warn('[Avatar3D] preview image failed to load:', activePreviewImageUrl);
+    if (storedAvatarUrl || user?.avatar_url) {
+      setPreviewMode('base');
+      return;
+    }
+    if (user?.avatar_animated_url) {
+      setPreviewMode('animated');
     }
   };
 
@@ -311,11 +326,15 @@ export default function ProfileScreen({ navigation }) {
       setGenState(GEN_STATE.DONE);
       let storedBase = null;
       let storedTexture = null;
+      let storedImage = null;
       if (authUser?.id) {
         try {
           storedBase = await copyRemoteAvatarToStorage(authUser.id, gen.baseModelUrl ?? gen.modelUrl, `avatar-base-${Date.now()}.glb`);
           if (gen.textureModelUrl) {
             storedTexture = await copyRemoteAvatarToStorage(authUser.id, gen.textureModelUrl, `avatar-texture-${Date.now()}.glb`);
+          }
+          if (gen.renderedImageUrl) {
+            storedImage = await copyRemoteAvatarImageToStorage(authUser.id, gen.renderedImageUrl, `avatar-preview-${Date.now()}.png`);
           }
         } catch (storageErr) {
           console.warn('[Avatar3D] avatar storage fallback during generation:', storageErr?.message ?? String(storageErr));
@@ -326,13 +345,14 @@ export default function ProfileScreen({ navigation }) {
         avatar_storage_path: storedBase?.storagePath ?? null,
         avatar_texture_url: storedTexture?.publicUrl ?? gen.textureModelUrl ?? null,
         avatar_animated_url: null,
-        avatar_image_url: gen.renderedImageUrl,
+        avatar_image_url: storedImage?.publicUrl ?? gen.renderedImageUrl,
         avatar_task_id: gen.taskId,
       });
       console.log('[Avatar3D] saved profile urls:', JSON.stringify({
         avatar_url: storedBase?.publicUrl ?? gen.baseModelUrl ?? gen.modelUrl,
         avatar_storage_path: storedBase?.storagePath ?? null,
         avatar_texture_url: storedTexture?.publicUrl ?? gen.textureModelUrl ?? null,
+        avatar_image_url: storedImage?.publicUrl ?? gen.renderedImageUrl,
       }, null, 2));
       setGenState(GEN_STATE.IDLE);
       setGenLabel('');
@@ -363,9 +383,13 @@ export default function ProfileScreen({ navigation }) {
       }
 
       let stored = null;
+      let storedImage = null;
       if (authUser?.id) {
         try {
           stored = await copyRemoteAvatarToStorage(authUser.id, result.modelUrl);
+          if (result.renderedImageUrl) {
+            storedImage = await copyRemoteAvatarImageToStorage(authUser.id, result.renderedImageUrl, `avatar-preview-${Date.now()}.png`);
+          }
         } catch (storageErr) {
           console.warn('[Avatar3D] avatar storage fallback during animation:', storageErr?.message ?? String(storageErr));
         }
@@ -373,7 +397,7 @@ export default function ProfileScreen({ navigation }) {
 
       await patchProfile({
         avatar_animated_url: stored?.publicUrl ?? result.modelUrl,
-        avatar_image_url: result.renderedImageUrl ?? user.avatar_image_url,
+        avatar_image_url: storedImage?.publicUrl ?? result.renderedImageUrl ?? user.avatar_image_url,
         avatar_task_id: result.animatedTaskId,
       });
 
@@ -467,7 +491,11 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.avatarBannerWrap} {...avatarPanResponder.panHandlers}>
           {previewMode === 'preview' && activePreviewImageUrl && genState === GEN_STATE.IDLE ? (
             <View style={[styles.avatarBanner, styles.avatarPreviewPanel]}>
-              <Image source={{ uri: activePreviewImageUrl }} style={styles.avatarPreviewHero} />
+              <Image
+                source={{ uri: activePreviewImageUrl }}
+                style={styles.avatarPreviewHero}
+                onError={handlePreviewImageError}
+              />
             </View>
           ) : activeAvatarUrl && genState === GEN_STATE.IDLE ? (
             <Avatar3DViewer
