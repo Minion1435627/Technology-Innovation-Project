@@ -303,3 +303,4 @@ const styles = StyleSheet.create({
   rowScoreValue: { ...typography.h4, color: colors.textPrimary },
   rowScoreLabel: { ...typography.caption, color: colors.textMuted },
 });
+
