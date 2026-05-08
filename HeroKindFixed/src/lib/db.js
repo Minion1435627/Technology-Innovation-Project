@@ -1,5 +1,75 @@
 import { supabase } from './supabase';
 
+const AVATAR_BUCKET = 'avatars';
+
+export function getAvatarPublicUrl(storagePath) {
+  if (!storagePath) return null;
+  const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(storagePath);
+  return data?.publicUrl ?? null;
+}
+
+export async function copyRemoteAvatarToStorage(userId, remoteUrl, filename = `avatar-${Date.now()}.glb`) {
+  if (!userId) throw new Error('Missing user id for avatar storage.');
+  if (!remoteUrl) throw new Error('Missing remote avatar URL.');
+
+  const response = await fetch(remoteUrl);
+  if (!response.ok) {
+    throw new Error(`Avatar download failed (${response.status})`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const storagePath = `users/${userId}/${filename}`;
+
+  const { error } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(storagePath, arrayBuffer, {
+      contentType: 'model/gltf-binary',
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(`Supabase storage upload failed: ${error.message}`);
+  }
+
+  return {
+    storagePath,
+    publicUrl: getAvatarPublicUrl(storagePath),
+  };
+}
+
+export async function copyRemoteAvatarImageToStorage(userId, remoteUrl, filename = `avatar-preview-${Date.now()}.png`) {
+  if (!userId) throw new Error('Missing user id for avatar image storage.');
+  if (!remoteUrl) throw new Error('Missing remote avatar image URL.');
+
+  const response = await fetch(remoteUrl);
+  if (!response.ok) {
+    throw new Error(`Avatar image download failed (${response.status})`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const lowerName = filename.toLowerCase();
+  const contentType = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')
+    ? 'image/jpeg'
+    : 'image/png';
+  const storagePath = `users/${userId}/${filename}`;
+
+  const { error } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(storagePath, arrayBuffer, {
+      contentType,
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(`Supabase avatar image upload failed: ${error.message}`);
+  }
+
+  return {
+    storagePath,
+    publicUrl: getAvatarPublicUrl(storagePath),
+  };
+}
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export async function fetchUserProfile(userId) {
@@ -84,23 +154,52 @@ export async function removeFriend(userId, friendId) {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
-export async function submitReview({ reviewerId, revieweeId, transactionId, stars, comment, tags }) {
+const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+export async function createReview({ transactionId, reviewerId, revieweeId, stars, comment, tagLabels = [] }) {
   const { data: review, error } = await supabase
     .from('reviews')
-    .insert({ reviewer_id: reviewerId, reviewee_id: revieweeId, transaction_id: transactionId, stars, comment })
+    .insert({
+      transaction_id: isUuid(transactionId) ? transactionId : null,
+      reviewer_id: reviewerId,
+      reviewee_id: revieweeId,
+      stars,
+      comment: comment?.trim() || null,
+    })
     .select()
     .single();
-  if (error) { console.error('submitReview:', error.message); return null; }
 
-  if (tags?.length) {
-    const tagRows = await Promise.all(
-      tags.map(label => supabase.from('review_tags').select('id').eq('label', label).maybeSingle())
-    );
-    const tagInserts = tagRows
-      .map(r => r.data?.id)
-      .filter(Boolean)
-      .map(tagId => ({ review_id: review.id, tag_id: tagId }));
-    if (tagInserts.length) await supabase.from('review_selected_tags').insert(tagInserts);
+  if (error) {
+    console.error('createReview:', error.message);
+    return null;
+  }
+
+  const cleanedLabels = tagLabels.filter(Boolean);
+  if (cleanedLabels.length) {
+    const { data: tags, error: tagsError } = await supabase
+      .from('review_tags')
+      .select('id, label')
+      .in('label', cleanedLabels);
+
+    if (tagsError) {
+      console.error('createReview tags lookup:', tagsError.message);
+      return review;
+    }
+
+    const selectedRows = (tags ?? []).map(tag => ({
+      review_id: review.id,
+      tag_id: tag.id,
+    }));
+
+    if (selectedRows.length) {
+      const { error: selectedError } = await supabase
+        .from('review_selected_tags')
+        .insert(selectedRows);
+
+      if (selectedError) {
+        console.error('createReview selected tags:', selectedError.message);
+      }
+    }
   }
 
   // Recalculate reviewee's star rating
@@ -138,28 +237,45 @@ export async function fetchUserReviews(userId) {
 
 // ─── Chats ────────────────────────────────────────────────────────────────────
 
-export async function createChat(user1Id, user2Id) {
-  // Return existing chat between these two users if one already exists
+function normalizeChatParticipants(user1Id, user2Id) {
+  return [user1Id, user2Id].sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+export async function createChat(user1Id, user2Id, postId = null) {
+  const [normalizedUser1Id, normalizedUser2Id] = normalizeChatParticipants(user1Id, user2Id);
   const { data: existing } = await supabase
     .from('chats')
-    .select('id')
-    .or(`and(user1_id.eq.${user1Id},user2_id.eq.${user2Id}),and(user1_id.eq.${user2Id},user2_id.eq.${user1Id})`)
+    .select('id, post_id')
+    .eq('user1_id', normalizedUser1Id)
+    .eq('user2_id', normalizedUser2Id)
     .maybeSingle();
   if (existing) return existing;
 
   const { data, error } = await supabase
     .from('chats')
-    .insert({ user1_id: user1Id, user2_id: user2Id })
+    .insert({ user1_id: normalizedUser1Id, user2_id: normalizedUser2Id })
     .select()
     .single();
   if (error) console.error('createChat:', error.message);
   return data;
 }
 
+export async function createChatWithPost(user1Id, user2Id, postId = null) {
+  const existing = await createChat(user1Id, user2Id, postId);
+  if (existing?.id && postId) {
+    await supabase
+      .from('chats')
+      .update({ post_id: postId })
+      .eq('id', existing.id)
+      .is('post_id', null);
+  }
+  return existing;
+}
+
 export async function fetchChats(userId) {
   const { data, error } = await supabase
     .from('chats')
-    .select(`*, user1:user1_id(id, name, stars, gender), user2:user2_id(id, name, stars, gender)`)
+    .select(`*, user1:user1_id(id, name, stars, gender), user2:user2_id(id, name, stars, gender), post:post_id(id, user_id, type, title, category)`)
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
     .order('last_message_at', { ascending: false });
   if (error) console.error('fetchChats:', error.message);
@@ -176,15 +292,41 @@ export async function fetchTransactionById(txId) {
   return data ?? null;
 }
 
-export async function fetchTransactionByChat(chatId) {
+
+const ACTIVE_TRANSACTION_STATUSES = ['pending', 'in_progress', 'overdue', 'disputed'];
+
+export async function fetchTransactionByChat(chatId, postId = null) {
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, status, type, item, provider_id, requester_id, agreed_return_date')
+    .select('id, post_id, status, type, item, provider_id, requester_id, handover_date, agreed_return_date, completed_date, pending_by_user_id, created_at')
     .eq('chat_id', chatId)
-    .limit(1)
-    .maybeSingle();
+    .order('created_at', { ascending: false });
   if (error) console.warn('fetchTransactionByChat:', error.message);
-  return data ?? null;
+  const rows = data ?? [];
+  if (!rows.length) return null;
+
+  if (postId) {
+    const matchingPostRows = rows.filter(row => row.post_id === postId);
+    const matchingActive = matchingPostRows.find(row => ACTIVE_TRANSACTION_STATUSES.includes(row.status));
+    if (matchingActive) return matchingActive;
+    if (matchingPostRows.length) return matchingPostRows[0];
+
+    // If this specific post has never started and there is no other active
+    // exchange bound to this post, treat it as "no exchange yet" so the UI can show Start.
+    return null;
+  }
+
+  return rows.find(row => ACTIVE_TRANSACTION_STATUSES.includes(row.status)) ?? rows[0] ?? null;
+}
+
+export async function fetchTransactionsByChat(chatId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, post_id, status, type, item, provider_id, requester_id, handover_date, agreed_return_date, completed_date, pending_by_user_id, created_at, post:post_id(id, title, type, category, user_id)')
+    .eq('chat_id', chatId)
+    .order('created_at', { ascending: false });
+  if (error) console.warn('fetchTransactionsByChat:', error.message);
+  return data ?? [];
 }
 
 export async function fetchMessages(chatId) {
@@ -212,6 +354,7 @@ export async function sendMessage(chatId, senderId, text) {
   return !msgError;
 }
 
+
 // ─── Transactions ─────────────────────────────────────────────────────────────
 
 export async function fetchLeaderboard() {
@@ -225,6 +368,21 @@ export async function fetchLeaderboard() {
 }
 
 export async function createTransaction(tx) {
+  if (tx.chat_id) {
+    const { data: existing, error: existingError } = await supabase
+      .from('transactions')
+      .select('id, post_id, status, type, item, provider_id, requester_id, agreed_return_date, pending_by_user_id')
+      .eq('chat_id', tx.chat_id)
+      .eq('post_id', tx.post_id ?? null)
+      .in('status', ['pending', 'in_progress', 'overdue', 'disputed'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingError) console.warn('createTransaction lookup:', existingError.message);
+    if (existing) return existing;
+  }
+
   const { data, error } = await supabase
     .from('transactions')
     .insert(tx)
@@ -252,28 +410,110 @@ export async function updateTransactionStatus(transactionId, status) {
     .update(fields)
     .eq('id', transactionId);
   if (error) console.error('updateTransactionStatus:', error.message);
+  return !error;
+}
 
-  // Deactivate the linked post when transaction completes
-  if (!error && status === 'completed') {
-    const { data: tx } = await supabase
-      .from('transactions')
-      .select('chat_id')
-      .eq('id', transactionId)
-      .maybeSingle();
-    if (tx?.chat_id) {
-      const { data: chat } = await supabase
-        .from('chats')
-        .select('post_title')
-        .eq('id', tx.chat_id)
-        .maybeSingle();
-      if (chat?.post_title) {
-        await supabase
-          .from('posts')
-          .update({ is_active: false })
-          .ilike('title', chat.post_title);
-      }
-    }
+export async function updateTransaction(transactionId, fields) {
+  const { error } = await supabase
+    .from('transactions')
+    .update(fields)
+    .eq('id', transactionId);
+  if (error) console.error('updateTransaction:', error.message);
+  return !error;
+}
+
+export async function deleteTransaction(transactionId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', transactionId)
+    .select('id');
+  if (error) console.error('deleteTransaction:', error.message);
+  return !error && Array.isArray(data) && data.length > 0;
+}
+
+export async function deletePendingTransactionById(transactionId) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', transactionId)
+    .eq('status', 'pending')
+    .select('id');
+  if (error) console.error('deletePendingTransactionById:', error.message);
+  return !error && Array.isArray(data) && data.length > 0;
+}
+
+export async function deletePendingTransactionsByChat(chatId, pendingByUserId) {
+  let query = supabase
+    .from('transactions')
+    .delete()
+    .eq('chat_id', chatId)
+    .eq('status', 'pending')
+    .select('id');
+
+  if (pendingByUserId) {
+    query = query.eq('pending_by_user_id', pendingByUserId);
   }
 
-  return !error;
+  const { data, error } = await query;
+  if (error) console.error('deletePendingTransactionsByChat:', error.message);
+  return !error && Array.isArray(data) && data.length > 0;
+}
+
+// ─── Task Progress ────────────────────────────────────────────────────────────
+
+export async function fetchTaskProgress(userId) {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday).toISOString();
+
+  const [
+    completedToday,
+    completedWeek,
+    lentWeek,
+    reviewsGivenToday,
+    reviewsReceivedWeek,
+    messagesToday,
+    postsToday,
+    postsWeek,
+    startedWeek,
+  ] = await Promise.all([
+    supabase.from('transactions').select('id', { count: 'exact', head: true })
+      .or(`provider_id.eq.${userId},requester_id.eq.${userId}`)
+      .eq('status', 'completed').gte('completed_date', todayStart),
+    supabase.from('transactions').select('id', { count: 'exact', head: true })
+      .or(`provider_id.eq.${userId},requester_id.eq.${userId}`)
+      .eq('status', 'completed').gte('completed_date', weekStart),
+    supabase.from('transactions').select('id', { count: 'exact', head: true })
+      .eq('provider_id', userId).eq('type', 'borrow')
+      .eq('status', 'completed').gte('completed_date', weekStart),
+    supabase.from('reviews').select('id', { count: 'exact', head: true })
+      .eq('reviewer_id', userId).gte('created_at', todayStart),
+    supabase.from('reviews').select('id', { count: 'exact', head: true })
+      .eq('reviewee_id', userId).gte('created_at', weekStart),
+    supabase.from('messages').select('id', { count: 'exact', head: true })
+      .eq('sender_id', userId).gte('created_at', todayStart),
+    supabase.from('posts').select('id', { count: 'exact', head: true })
+      .eq('user_id', userId).gte('created_at', todayStart),
+    supabase.from('posts').select('id', { count: 'exact', head: true })
+      .eq('user_id', userId).gte('created_at', weekStart),
+    supabase.from('transactions').select('id', { count: 'exact', head: true })
+      .or(`provider_id.eq.${userId},requester_id.eq.${userId}`)
+      .gte('created_at', weekStart),
+  ]);
+
+  return {
+    completedToday:      completedToday.count      ?? 0,
+    completedWeek:       completedWeek.count        ?? 0,
+    lentWeek:            lentWeek.count             ?? 0,
+    reviewsGivenToday:   reviewsGivenToday.count    ?? 0,
+    reviewsReceivedWeek: reviewsReceivedWeek.count  ?? 0,
+    messagesToday:       messagesToday.count        ?? 0,
+    postsToday:          postsToday.count           ?? 0,
+    postsWeek:           postsWeek.count            ?? 0,
+    startedWeek:         startedWeek.count          ?? 0,
+  };
 }

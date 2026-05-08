@@ -4,14 +4,16 @@ import {
   FlatList, TextInput, KeyboardAvoidingView, Platform, Modal, ScrollView, Alert, PanResponder, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
 import { useChats } from '../context/ChatContext';
-import { fetchMessages, sendMessage as dbSendMessage, createTransaction, updateTransactionStatus, createChat, fetchTransactionById } from '../lib/db';
+import { fetchMessages, sendMessage as dbSendMessage, createTransaction, updateTransaction, updateTransactionStatus, createChatWithPost, fetchTransactionById, fetchTransactionByChat, fetchTransactionsByChat, deletePendingTransactionsByChat, deletePendingTransactionById, createNotification } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { usePosts } from '../context/PostsContext';
 
 const ATTACHMENT_PROOF_OPTIONS = [
   { id: 'general', label: 'General photo' },
@@ -117,6 +119,16 @@ const EXCHANGE_META = {
     actionLabel: 'View Exchange',
   },
 };
+
+const STATUS_LABELS = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  overdue: 'Overdue',
+  disputed: 'Disputed',
+};
+
+const ACTIVE_TASK_STATUSES = ['pending', 'in_progress', 'overdue', 'disputed'];
 
 const EXCHANGE_SYSTEM_MESSAGES = {
   c1: [
@@ -444,18 +456,22 @@ const EXCHANGE_STATUS_CONFIG = {
 };
 
 export default function ChatScreen({ navigation, route }) {
-  const { addChat, updateLastMessage, refreshChatExchange } = useChats();
+  const { chats, addChat, updateLastMessage, refreshChatExchange } = useChats();
   const { user, profile } = useAuth();
+  const { posts } = usePosts();
   const [input, setInput] = useState('');
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [startExchangeOpen, setStartExchangeOpen] = useState(false);
   const [statusHistoryOpen, setStatusHistoryOpen] = useState(false);
+  const [taskSwitcherOpen, setTaskSwitcherOpen] = useState(false);
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const [reviewPromptConfirmOpen, setReviewPromptConfirmOpen] = useState(false);
   const [statusReasonOpen, setStatusReasonOpen] = useState(false);
   const [statusReasonConfig, setStatusReasonConfig] = useState({ title: '', body: '' });
   const [menuOpen, setMenuOpen] = useState(false);
   const [exchangeOptionsOpen, setExchangeOptionsOpen] = useState(false);
+  const [pendingInviteOpen, setPendingInviteOpen] = useState(false);
+  const [pendingInviteDismissChecked, setPendingInviteDismissChecked] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showStickyCompact, setShowStickyCompact] = useState(false);
   const [draftExchangeType, setDraftExchangeType] = useState('borrow');
@@ -464,6 +480,9 @@ export default function ChatScreen({ navigation, route }) {
   const [selectedAttachmentSource, setSelectedAttachmentSource] = useState('camera');
   const [selectedAttachmentProof, setSelectedAttachmentProof] = useState('general');
   const [selectedLocationType, setSelectedLocationType] = useState('live');
+  const [taskOptions, setTaskOptions] = useState([]);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [selectedTaskPostId, setSelectedTaskPostId] = useState(null);
 
   const chat = route?.params?.chat;
   const newChatIdRef = useRef(`c_${Date.now()}`);
@@ -473,12 +492,35 @@ export default function ChatScreen({ navigation, route }) {
   const otherUserId = chat?.user?.id ?? 'u6';
   const otherUserName = chat?.user?.name ?? 'David M.';
   const otherUserGender = chat?.user?.gender;
+  const fallbackPost = useMemo(() => posts.find(p =>
+    p.title === chat?.postTitle && (p.poster?.id === otherUserId || p.user_id === otherUserId)
+  ), [posts, chat?.postTitle, otherUserId]);
+  const chatPostId = chat?.postId ?? fallbackPost?.id ?? null;
+  const chatPostType = chat?.postType ?? fallbackPost?.type ?? null;
+  const chatPostOwnerId = chat?.postOwnerId ?? fallbackPost?.poster?.id ?? fallbackPost?.user_id ?? null;
+  const chatPostCategory = chat?.postCategory ?? fallbackPost?.category ?? null;
+  const activeTaskPostId = selectedTaskPostId ?? chatPostId ?? null;
+
+  useEffect(() => {
+    setDbChatId(isDbChatId(chat?.id) ? chat.id : null);
+    manualTaskSelectionRef.current = false;
+    setSelectedTaskId(null);
+    setSelectedTaskPostId(chatPostId ?? null);
+    if (isDbChatId(chat?.id)) {
+      setExchange(null);
+    }
+  }, [chat?.id, chatPostId]);
+
   // Register a brand-new chat in the list when opening from the map
   useEffect(() => {
     if (!chat?.id) {
       addChat({
         id: effectiveChatId,
         user: chat?.user ?? {},
+        postId: chatPostId,
+        postType: chatPostType,
+        postOwnerId: chatPostOwnerId,
+        postCategory: chatPostCategory,
         postTitle: chat?.postTitle ?? 'New conversation',
         lastMessage: '',
         time: 'Just now',
@@ -495,7 +537,102 @@ export default function ChatScreen({ navigation, route }) {
       typeLabel: 'Post',
       description: 'Open the original post for the full task details.',
     };
+  const selectedTaskMeta = useMemo(() => {
+    const matchedTask = selectedTaskId
+      ? taskOptions.find(option => option.transactionId === selectedTaskId)
+      : taskOptions.find(option => (option.postId ?? null) === (activeTaskPostId ?? null));
+    if (matchedTask) {
+      return {
+        title: matchedTask.title,
+        category: matchedTask.category,
+        typeLabel: matchedTask.typeLabel,
+        description: matchedTask.description ?? postMeta.description,
+      };
+    }
+    return postMeta;
+  }, [taskOptions, activeTaskPostId, postMeta]);
   const [messages, setMessages] = useState([]);
+
+  const formatTimelineTime = (value) => {
+    if (!value) return 'Not recorded yet';
+    return new Date(value).toLocaleString('en-AU', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const inferTransactionTypeFromCategory = (category) => {
+    switch (category) {
+      case 'Borrow an item':
+      case 'Lend an item':
+        return 'borrow';
+      case 'Physical help':
+      case 'Study / Skills':
+      case 'Study/skills':
+      case 'Offer skills':
+      case 'Pet care':
+        return 'service';
+      default:
+        return null;
+    }
+  };
+
+  const autoExchangeType = inferTransactionTypeFromCategory(chatPostCategory);
+
+  useEffect(() => {
+    if (autoExchangeType) {
+      setDraftExchangeType(autoExchangeType);
+    }
+  }, [autoExchangeType]);
+
+  const getPendingRoleFromTx = (tx, myRole) => {
+    if (!tx?.pending_by_user_id) return myRole === 'requester' ? 'requester' : 'provider';
+    if (tx.pending_by_user_id === tx.provider_id) return 'provider';
+    if (tx.pending_by_user_id === tx.requester_id) return 'requester';
+    return myRole === 'requester' ? 'requester' : 'provider';
+  };
+
+  const deriveTransactionRoles = () => {
+    const me = {
+      id: user?.id,
+      name: profile?.name ?? user?.email ?? 'You',
+      level: profile?.level ?? 1,
+      stars: profile?.stars ?? 5,
+    };
+    const them = {
+      id: otherUserId,
+      name: otherUserName,
+      level: chat?.user?.level ?? 3,
+      stars: chat?.user?.stars ?? 4.7,
+    };
+
+    if (exchange?.myRole === 'provider') {
+      return { myRole: 'provider', provider: me, requester: them };
+    }
+
+    if (exchange?.myRole === 'requester') {
+      return { myRole: 'requester', provider: them, requester: me };
+    }
+
+    if (chatPostType === 'need') {
+      if (chatPostOwnerId === user?.id) {
+        return { myRole: 'requester', provider: them, requester: me };
+      }
+      return { myRole: 'provider', provider: me, requester: them };
+    }
+
+    if (chatPostType === 'supply') {
+      if (chatPostOwnerId === user?.id) {
+        return { myRole: 'provider', provider: me, requester: them };
+      }
+      return { myRole: 'requester', provider: them, requester: me };
+    }
+
+    return { myRole: exchange?.myRole ?? 'requester', provider: them, requester: me };
+  };
 
   // Load messages from DB and subscribe to realtime inserts
   useEffect(() => {
@@ -509,10 +646,13 @@ export default function ChatScreen({ navigation, route }) {
       read: true,
     });
 
-    fetchMessages(dbChatId).then(rows => setMessages(rows.map(mapMsg)));
+    fetchMessages(dbChatId).then(rows => {
+      setMessages(rows.map(mapMsg));
+      setTimeout(() => scrollToLatest(false), 100);
+    });
 
     const channel = supabase
-      .channel(`chat_messages_${dbChatId}`)
+      .channel(`chat_messages_${dbChatId}_${user?.id ?? 'guest'}_${Date.now()}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'HelpMate',
@@ -522,13 +662,14 @@ export default function ChatScreen({ navigation, route }) {
         setMessages(prev =>
           prev.some(p => p.id === m.id) ? prev : [...prev, mapMsg(m)]
         );
-        setTimeout(() => scrollToLatest(true), 30);
       })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, [dbChatId, user?.id]);
-  const [exchange, setExchange] = useState(chat?.exchange ?? (chat?.id ? EXCHANGE_META[chat.id] ?? null : null));
+  const [exchange, setExchange] = useState(
+    isDbChatId(chat?.id) ? null : (chat?.exchange ?? (chat?.id ? EXCHANGE_META[chat.id] ?? null : null))
+  );
   const [showScrollUpBtn, setShowScrollUpBtn] = useState(false);
   const [showScrollDownBtn, setShowScrollDownBtn] = useState(false);
   const listRef = useRef(null);
@@ -536,6 +677,9 @@ export default function ChatScreen({ navigation, route }) {
   const contentHeightRef = useRef(0);
   const layoutHeightRef = useRef(0);
   const scrollOffsetRef = useRef(0);
+  const pendingAlertedTxRef = useRef(null);
+  const dismissedPendingTxRef = useRef(new Set());
+  const manualTaskSelectionRef = useRef(false);
   const exchangeStyle = EXCHANGE_STATUS_CONFIG[exchange?.state ?? 'none'];
   const GENDER_ICON = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
 
@@ -546,9 +690,6 @@ export default function ChatScreen({ navigation, route }) {
         0
       );
       listRef.current?.scrollToOffset({ offset: targetOffset, animated });
-      setTimeout(() => {
-        listRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
-      }, 70);
     });
   };
 
@@ -563,6 +704,156 @@ export default function ChatScreen({ navigation, route }) {
     setShowScrollUpBtn(offsetY > 120);
     setShowScrollDownBtn(distanceFromBottom > 80);
   };
+
+  useEffect(() => {
+    const liveChat = chats.find(c => c.id === (dbChatId ?? effectiveChatId));
+    const liveChatPostId = liveChat?.postId ?? null;
+    const currentTaskPostId = activeTaskPostId ?? null;
+
+    if (currentTaskPostId && liveChatPostId && liveChatPostId !== currentTaskPostId) {
+      return;
+    }
+    if (liveChat?.exchange) {
+      setExchange(prev => {
+        if (
+          prev?.transactionId === liveChat.exchange.transactionId &&
+          prev?.state === liveChat.exchange.state &&
+          prev?.pendingBy === liveChat.exchange.pendingBy
+        ) {
+          return prev;
+        }
+        return liveChat.exchange;
+      });
+    } else if (liveChat && liveChat.exchange === null && exchange?.transactionId) {
+      setExchange(null);
+    }
+  }, [chats, dbChatId, effectiveChatId, activeTaskPostId, exchange?.transactionId]);
+
+  useEffect(() => {
+    const chatId = dbChatId ?? effectiveChatId;
+    if (!chatId || !isDbChatId(chatId)) return;
+    const fetchSelected = selectedTaskId
+      ? fetchTransactionById(selectedTaskId)
+      : fetchTransactionByChat(chatId, activeTaskPostId);
+
+    fetchSelected.then(tx => {
+      if (!tx) {
+        setExchange(null);
+        return;
+      }
+      const myRole = tx.provider_id === user?.id ? 'provider' : 'requester';
+      setExchange({
+        transactionId: tx.id,
+        state: tx.status ?? 'pending',
+        type: tx.type ?? 'borrow',
+        myRole,
+        pendingBy: getPendingRoleFromTx(tx, myRole),
+        pendingByUserId: tx.pending_by_user_id ?? null,
+        typeLabel: (tx.type ?? 'borrow') === 'service' ? 'Help / service' : 'Borrowed item',
+        statusLabel: STATUS_LABELS[tx.status ?? 'pending'] ?? 'Pending',
+        countdownText: tx.agreed_return_date
+          ? `Return: ${new Date(tx.agreed_return_date).toLocaleDateString()}`
+          : '',
+        summaryText: tx.item ?? '',
+        actionLabel: 'View Exchange',
+        createdAt: tx.created_at ?? null,
+        handoverDate: tx.handover_date ?? null,
+        agreedReturnDate: tx.agreed_return_date ?? null,
+        completedDate: tx.completed_date ?? null,
+      });
+    });
+  }, [dbChatId, effectiveChatId, activeTaskPostId, selectedTaskId, user?.id]);
+
+  useEffect(() => {
+    const chatId = dbChatId ?? effectiveChatId;
+    if (!chatId || !isDbChatId(chatId)) {
+      setTaskOptions(chatPostId ? [{
+        id: `task_${chatPostId}`,
+        postId: chatPostId,
+        title: chat?.postTitle ?? 'Current task',
+        category: chatPostCategory ?? 'General',
+        typeLabel: chatPostType === 'need' ? 'Need' : chatPostType === 'supply' ? 'Supply' : 'Post',
+        status: exchange?.state ?? 'none',
+        statusLabel: exchange?.statusLabel ?? 'No exchange yet',
+        description: postMeta.description,
+      }] : []);
+      return;
+    }
+
+    fetchTransactionsByChat(chatId).then(rows => {
+      const mapped = rows.map((row, index) => ({
+        id: `task_tx_${row.id}`,
+        transactionId: row.id,
+        postId: row.post_id ?? `tx_${row.id}`,
+        title: row.post?.title ?? row.item ?? `Task ${index + 1}`,
+        category: row.post?.category ?? ((row.type ?? 'borrow') === 'service' ? 'Help / service' : 'Borrowed item'),
+        typeLabel: row.post?.type === 'need' ? 'Need' : row.post?.type === 'supply' ? 'Supply' : 'Post',
+        status: row.status ?? 'pending',
+        statusLabel: STATUS_LABELS[row.status ?? 'pending'] ?? 'Pending',
+        description: row.item ?? postMeta.description,
+        createdAt: row.created_at,
+      }));
+
+      if (chatPostId && !mapped.some(option => option.postId === chatPostId)) {
+        mapped.unshift({
+          id: `task_${chatPostId}`,
+          transactionId: null,
+          postId: chatPostId,
+          title: chat?.postTitle ?? 'Current task',
+          category: chatPostCategory ?? 'General',
+          typeLabel: chatPostType === 'need' ? 'Need' : chatPostType === 'supply' ? 'Supply' : 'Post',
+          status: exchange?.state ?? 'none',
+          statusLabel: exchange?.statusLabel ?? 'No exchange yet',
+          description: postMeta.description,
+          createdAt: null,
+        });
+      }
+
+      const incomingPending = rows.find(row =>
+        row.status === 'pending' &&
+        row.pending_by_user_id &&
+        row.pending_by_user_id !== user?.id
+      );
+      const latestActive = rows.find(row => ACTIVE_TASK_STATUSES.includes(row.status));
+      const preferredTask = incomingPending ?? latestActive ?? rows[0] ?? null;
+      const incomingPendingPostId = incomingPending
+        ? (incomingPending.post_id ?? `tx_${incomingPending.id}`)
+        : null;
+      const preferredTaskPostId = preferredTask
+        ? (preferredTask.post_id ?? `tx_${preferredTask.id}`)
+        : null;
+      const hasManualSelection = manualTaskSelectionRef.current;
+
+      setTaskOptions(mapped);
+      setSelectedTaskId(currentSelectedId => {
+        if (hasManualSelection && currentSelectedId && mapped.some(option => option.transactionId === currentSelectedId)) {
+          return currentSelectedId;
+        }
+        if (incomingPending?.id && mapped.some(option => option.transactionId === incomingPending.id)) {
+          return incomingPending.id;
+        }
+        if (preferredTask?.id && mapped.some(option => option.transactionId === preferredTask.id)) {
+          return preferredTask.id;
+        }
+        return null;
+      });
+      setSelectedTaskPostId(currentSelected => {
+        if (hasManualSelection && currentSelected && mapped.some(option => option.postId === currentSelected)) {
+          return currentSelected;
+        }
+        if (incomingPendingPostId && mapped.some(option => option.postId === incomingPendingPostId)) {
+          return incomingPendingPostId;
+        }
+        if (preferredTaskPostId && mapped.some(option => option.postId === preferredTaskPostId)) {
+          return preferredTaskPostId;
+        }
+        if (chatPostId && mapped.some(option => option.postId === chatPostId)) {
+          return chatPostId;
+        }
+        return mapped[0]?.postId ?? chatPostId ?? null;
+      });
+    });
+  }, [dbChatId, effectiveChatId, chatPostId, chat?.postTitle, chatPostCategory, chatPostType, exchange?.state, exchange?.statusLabel, postMeta.description, user?.id]);
 
   const goToProfile = () => navigation.navigate('UserProfile', { userId: otherUserId });
   const openOriginalPost = () => {
@@ -629,27 +920,73 @@ export default function ChatScreen({ navigation, route }) {
     ];
   }, [chat?.id, messages]);
   const statusHistory = useMemo(() => {
-    if (!chat?.id) return [];
-    return (EXCHANGE_SYSTEM_MESSAGES[chat.id] ?? []).map(entry => ({
-      id: entry.id,
-      title: entry.title,
-      time: entry.time,
-      body: entry.body,
-      icon: entry.icon,
-    }));
-  }, [chat?.id]);
+    if (!exchange) return [];
+
+    const history = [
+      {
+        id: `timeline_pending_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Pending',
+        time: formatTimelineTime(exchange.createdAt),
+        body: 'A start request was created for this task and is waiting for the other side to respond.',
+        icon: 'swap-horizontal-outline',
+      },
+    ];
+
+    if (['in_progress', 'due_soon', 'overdue', 'completed', 'disputed'].includes(exchange.state)) {
+      history.push({
+        id: `timeline_started_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Started',
+        time: formatTimelineTime(exchange.handoverDate ?? exchange.createdAt),
+        body: 'The other side accepted the request and this specific exchange moved into progress.',
+        icon: 'sync-outline',
+      });
+    }
+
+    if (exchange.state === 'overdue') {
+      history.push({
+        id: `timeline_overdue_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Overdue',
+        time: formatTimelineTime(exchange.agreedReturnDate),
+        body: 'The agreed deadline passed before this task was marked complete.',
+        icon: 'alert-circle-outline',
+      });
+    }
+
+    if (exchange.state === 'completed') {
+      history.push({
+        id: `timeline_completed_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Completed',
+        time: formatTimelineTime(exchange.completedDate),
+        body: 'Only this selected task was marked completed, so reviews can now be submitted for this transaction.',
+        icon: 'checkmark-circle-outline',
+      });
+    }
+
+    if (exchange.state === 'disputed') {
+      history.push({
+        id: `timeline_disputed_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Disputed',
+        time: formatTimelineTime(exchange.completedDate ?? exchange.agreedReturnDate ?? exchange.handoverDate ?? exchange.createdAt),
+        body: 'This selected task is currently under dispute.',
+        icon: 'warning-outline',
+      });
+    }
+
+    return history;
+  }, [exchange, activeTaskPostId]);
 
   const buildTransactionPayload = () => ({
     ...buildTimelineDates(),
     id: `t_${Date.now()}`,
+    chatId: effectiveChatId ?? dbChatId ?? null,
     status: exchange?.state === 'due_soon' ? 'in_progress' : exchange?.state ?? 'pending',
     type: exchange?.type ?? 'borrow',
     postTitle: chat?.postTitle ?? 'Exchange',
     item: chat?.postTitle ?? 'Item',
-    provider: { id: otherUserId, name: otherUserName, level: 3, stars: 4.7 },
-    requester: { id: 'u1', name: 'Alex Chen', level: 3, stars: 4.8 },
-    myRole: exchange?.myRole ?? 'requester',
-    pendingBy: exchange?.pendingBy ?? 'requester',
+    provider: deriveTransactionRoles().provider,
+    requester: deriveTransactionRoles().requester,
+    myRole: deriveTransactionRoles().myRole,
+    pendingBy: exchange?.pendingBy ?? null,
     notes: exchange?.type === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
   });
 
@@ -660,16 +997,18 @@ export default function ChatScreen({ navigation, route }) {
       if (tx) {
         const myRole = tx.provider_id === user?.id ? 'provider' : 'requester';
         navigation.navigate('Transaction', {
+          fromChat: true,
           transaction: {
             id: tx.id,
+            chatId: tx.chat_id ?? effectiveChatId ?? null,
             status: tx.status,
             type: tx.type ?? 'borrow',
-            postTitle: chat?.postTitle ?? 'Exchange',
-            item: tx.item ?? chat?.postTitle ?? 'Item',
+            postTitle: selectedTaskMeta.title ?? chat?.postTitle ?? 'Exchange',
+            item: tx.item ?? selectedTaskMeta.title ?? chat?.postTitle ?? 'Item',
             provider: tx.provider ?? { id: tx.provider_id, name: otherUserName },
             requester: tx.requester ?? { id: tx.requester_id, name: 'Unknown' },
             myRole,
-            pendingBy: myRole === 'requester' ? 'requester' : 'provider',
+            pendingBy: getPendingRoleFromTx(tx, myRole),
             handoverDate: tx.handover_date ?? new Date().toISOString(),
             agreedReturnDate: tx.agreed_return_date ?? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
             notes: 'Agreed return and handover via chat.',
@@ -678,7 +1017,7 @@ export default function ChatScreen({ navigation, route }) {
         return;
       }
     }
-    navigation.navigate('Transaction', { transaction: buildTransactionPayload() });
+    navigation.navigate('Transaction', { fromChat: true, transaction: buildTransactionPayload() });
   };
 
   const addSystemEvent = (title, body, icon = 'information-circle-outline') => {
@@ -701,18 +1040,25 @@ export default function ChatScreen({ navigation, route }) {
 
   const acceptExchangeInChat = () => {
     if (!exchange) return;
+    const startedAt = new Date().toISOString();
     setExchange(prev => ({
       ...prev,
       state: 'in_progress',
+      pendingBy: null,
       statusLabel: 'In Progress',
       countdownText: prev.type === 'service' ? 'Task window is now active' : 'Return countdown is now active',
       summaryText: prev.type === 'service'
         ? 'The exchange is active until the supplier marks the task completed'
         : 'The exchange is active until the supplier confirms completion',
+      handoverDate: startedAt,
     }));
     if (exchange.transactionId) {
-      updateTransactionStatus(exchange.transactionId, 'in_progress').then(() =>
-        refreshChatExchange(dbChatId)
+      updateTransaction(exchange.transactionId, {
+        status: 'in_progress',
+        pending_by_user_id: null,
+        handover_date: startedAt,
+      }).then(() =>
+        refreshChatExchange(dbChatId, activeTaskPostId)
       );
     }
     addSystemEvent(
@@ -721,6 +1067,145 @@ export default function ChatScreen({ navigation, route }) {
         ? 'The start request was accepted and this help task is now in progress.'
         : 'The start request was accepted and this borrowed-item exchange is now in progress.',
       'sync-outline'
+    );
+  };
+
+  const withdrawPendingExchangeInChat = () => {
+    if (!effectiveChatId || exchange?.state !== 'pending' || exchange?.pendingBy !== exchange?.myRole || !user?.id) return;
+
+    Alert.alert(
+      'Withdraw Start Request',
+      'This will cancel the current pending request so you can send a new start request later.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'destructive',
+          onPress: async () => {
+            const removed = await deletePendingTransactionsByChat(effectiveChatId, user.id);
+            if (!removed) {
+              Alert.alert('Unable to withdraw', 'The pending request could not be removed. Please check the database policy and try again.');
+              return;
+            }
+            setExchange(null);
+            addSystemEvent(
+              'Pending withdrawn',
+              'The start request was withdrawn before the other side accepted it.',
+              'close-circle-outline'
+            );
+            refreshChatExchange(effectiveChatId, activeTaskPostId);
+          },
+        },
+      ]
+    );
+  };
+
+  const refusePendingExchangeInChat = () => {
+    if (!exchange || exchange.state !== 'pending' || !canAcceptExchange || !exchange.transactionId) return;
+
+    Alert.alert(
+      'Refuse Start Request',
+      'This will refuse the current pending request and keep this task in the not-started state.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Refuse',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const pendingTx = await fetchTransactionById(exchange.transactionId);
+              const removed = await deletePendingTransactionById(exchange.transactionId);
+              if (!removed) {
+                Alert.alert('Unable to refuse', 'The pending request could not be removed. Please check the database policy and try again.');
+                return;
+              }
+
+              const senderId =
+                pendingTx?.pending_by_user_id ??
+                exchange.pendingByUserId ??
+                otherUserId;
+              if (senderId && senderId !== user?.id) {
+                const notificationResult = await createNotification({
+                  userId: senderId,
+                  type: 'exchange_refused',
+                  title: 'Start request refused',
+                  body: `${profile?.name ?? 'Someone'} refused your start request for "${selectedTaskMeta.title ?? 'this task'}".`,
+                  actorId: user?.id ?? null,
+                  referenceId: effectiveChatId,
+                  referenceType: 'chat',
+                });
+                if (!notificationResult?.ok) {
+                  console.warn('exchange_refused notification not created', {
+                    transactionId: exchange.transactionId,
+                    senderId,
+                    pendingByUserId: pendingTx?.pending_by_user_id ?? null,
+                    currentUserId: user?.id ?? null,
+                    effectiveChatId,
+                    errorMessage: notificationResult?.errorMessage ?? null,
+                  });
+                  Alert.alert(
+                    'Notification Debug',
+                    `senderId: ${senderId}\npendingByUserId: ${pendingTx?.pending_by_user_id ?? 'null'}\ncurrentUserId: ${user?.id ?? 'null'}\nerror: ${notificationResult?.errorMessage ?? 'unknown'}`
+                  );
+                }
+              }
+
+              const remainingTasks = effectiveChatId
+                ? await fetchTransactionsByChat(effectiveChatId)
+                : [];
+              const fallbackTask = remainingTasks.find(task =>
+                ['pending', 'in_progress', 'overdue', 'disputed'].includes(task.status)
+              ) ?? remainingTasks[0] ?? null;
+
+              let fallbackExchange = null;
+              if (fallbackTask) {
+                const fallbackRole = fallbackTask.provider_id === user?.id ? 'provider' : 'requester';
+                fallbackExchange = {
+                  transactionId: fallbackTask.id,
+                  state: fallbackTask.status ?? 'pending',
+                  type: fallbackTask.type ?? 'borrow',
+                  myRole: fallbackRole,
+                  pendingBy: getPendingRoleFromTx(fallbackTask, fallbackRole),
+                  pendingByUserId: fallbackTask.pending_by_user_id ?? null,
+                  typeLabel: (fallbackTask.type ?? 'borrow') === 'service' ? 'Help / service' : 'Borrowed item',
+                  statusLabel: STATUS_LABELS[fallbackTask.status ?? 'pending'] ?? 'Pending',
+                  countdownText: fallbackTask.agreed_return_date
+                    ? `Return: ${new Date(fallbackTask.agreed_return_date).toLocaleDateString()}`
+                    : '',
+                  summaryText: fallbackTask.item ?? '',
+                  actionLabel: 'View Exchange',
+                  createdAt: fallbackTask.created_at ?? null,
+                  handoverDate: fallbackTask.handover_date ?? null,
+                  agreedReturnDate: fallbackTask.agreed_return_date ?? null,
+                  completedDate: fallbackTask.completed_date ?? null,
+                };
+              }
+
+              setPendingInviteOpen(false);
+              manualTaskSelectionRef.current = false;
+              setExchange(fallbackExchange);
+              setSelectedTaskId(fallbackTask?.id ?? null);
+              setSelectedTaskPostId(
+                fallbackTask
+                  ? (fallbackTask.post_id ?? `tx_${fallbackTask.id}`)
+                  : null
+              );
+              addSystemEvent(
+                'Request refused',
+                'The pending start request was refused before the exchange could begin.',
+                'close-circle-outline'
+              );
+              refreshChatExchange(
+                effectiveChatId,
+                fallbackTask?.post_id ?? null
+              );
+            } catch (error) {
+              console.error('refusePendingExchangeInChat:', error?.message ?? error);
+              Alert.alert('Unable to refuse', 'Something went wrong while refusing this request.');
+            }
+          },
+        },
+      ]
     );
   };
 
@@ -735,9 +1220,11 @@ export default function ChatScreen({ navigation, route }) {
     setExchange(prev => ({
       ...prev,
       state: 'completed',
+      pendingBy: null,
       statusLabel: 'Completed',
       countdownText: 'Review prompt unlocked',
       summaryText: 'This exchange is complete. You can now leave a review.',
+      completedDate: new Date().toISOString(),
     }));
     addSystemEvent(
       'Exchange completed',
@@ -750,7 +1237,7 @@ export default function ChatScreen({ navigation, route }) {
     setReviewPromptConfirmOpen(true);
     if (exchange.transactionId) {
       updateTransactionStatus(exchange.transactionId, 'completed').then(() =>
-        refreshChatExchange(dbChatId)
+        refreshChatExchange(dbChatId, activeTaskPostId)
       );
     }
   };
@@ -764,6 +1251,7 @@ export default function ChatScreen({ navigation, route }) {
 
     setReviewPromptConfirmOpen(false);
     navigation.navigate('Transaction', {
+      fromChat: true,
       transaction: completedTransaction,
       focusReviewPrompt: true,
     });
@@ -771,6 +1259,7 @@ export default function ChatScreen({ navigation, route }) {
 
   const openCompletedReviewInTransaction = () => {
     navigation.navigate('Transaction', {
+      fromChat: true,
       transaction: {
         ...buildTransactionPayload(),
         status: 'completed',
@@ -806,12 +1295,14 @@ export default function ChatScreen({ navigation, route }) {
   };
 
   const startExchange = async () => {
+    const selectedExchangeType = autoExchangeType ?? draftExchangeType;
+    const roles = deriveTransactionRoles();
     const nextExchange = {
       state: 'pending',
-      type: draftExchangeType,
-      myRole: 'requester',
-      pendingBy: 'requester',
-      typeLabel: draftExchangeType === 'service' ? 'Help / service' : 'Borrowed item',
+      type: selectedExchangeType,
+      myRole: roles.myRole,
+      pendingBy: roles.myRole,
+      typeLabel: selectedExchangeType === 'service' ? 'Help / service' : 'Borrowed item',
       statusLabel: 'Pending',
       countdownText: 'Waiting for the other side to accept the start request',
       summaryText: 'A start request has been sent and this exchange is waiting for acceptance',
@@ -826,43 +1317,79 @@ export default function ChatScreen({ navigation, route }) {
     setStartExchangeOpen(false);
 
     const agreedReturnDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    let transactionChatId = effectiveChatId;
+
+    if (!isDbChatId(transactionChatId) && user?.id && chat?.user?.id) {
+      const savedChat = await createChatWithPost(user.id, chat.user.id, chatPostId);
+      if (savedChat?.id) {
+        transactionChatId = savedChat.id;
+        setDbChatId(savedChat.id);
+        addChat({
+          id: savedChat.id,
+          user: chat?.user ?? {},
+          postId: chatPostId,
+          postType: chatPostType,
+          postOwnerId: chatPostOwnerId,
+          postCategory: chatPostCategory,
+          postTitle: chat?.postTitle ?? 'New conversation',
+          lastMessage: '',
+          time: 'Just now',
+          unread: 0,
+          exchange: null,
+        });
+      }
+    }
 
     // Save to DB if this is a real chat
     let savedTx = null;
-    if (user?.id && isDbChatId(effectiveChatId)) {
+    if (user?.id && isDbChatId(transactionChatId)) {
       savedTx = await createTransaction({
-        requester_id: user.id,
-        provider_id: otherUserId,
-        type: draftExchangeType,
+        post_id: chatPostId,
+        requester_id: roles.requester.id,
+        provider_id: roles.provider.id,
+        pending_by_user_id: user.id,
+        type: selectedExchangeType,
         item: chat?.postTitle ?? 'Item',
         status: 'pending',
-        chat_id: effectiveChatId,
+        chat_id: transactionChatId,
         agreed_return_date: agreedReturnDate,
       });
     }
 
     setExchange({ ...nextExchange, transactionId: savedTx?.id ?? null });
-    if (savedTx?.id) refreshChatExchange(effectiveChatId);
+    if (savedTx?.id) refreshChatExchange(transactionChatId, chatPostId);
 
     navigation.navigate('Transaction', {
+      fromChat: true,
       transaction: {
         id: savedTx?.id ?? `t_${Date.now()}`,
+        chatId: transactionChatId ?? null,
         status: 'pending',
-        type: draftExchangeType,
+        type: selectedExchangeType,
         postTitle: chat?.postTitle ?? 'Exchange',
         item: chat?.postTitle ?? 'Item',
-        provider: { id: otherUserId, name: otherUserName, level: 3, stars: 4.7 },
-        requester: { id: user?.id, name: profile?.name ?? user?.email, level: profile?.level ?? 1, stars: profile?.stars ?? 5 },
-        myRole: 'requester',
-        pendingBy: 'requester',
+        provider: roles.provider,
+        requester: roles.requester,
+        myRole: roles.myRole,
+        pendingBy: roles.myRole,
         handoverDate: new Date().toISOString(),
         agreedReturnDate,
-        notes: draftExchangeType === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
+        notes: selectedExchangeType === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
       },
     });
   };
 
   const canAcceptExchange = Boolean(exchange?.pendingBy && exchange.pendingBy !== exchange?.myRole);
+  const previewRoles = deriveTransactionRoles();
+
+  useEffect(() => {
+    if (!exchange || exchange.state !== 'pending' || !canAcceptExchange || !exchange.transactionId) return;
+    if (pendingAlertedTxRef.current === exchange.transactionId) return;
+    if (dismissedPendingTxRef.current.has(exchange.transactionId)) return;
+    pendingAlertedTxRef.current = exchange.transactionId;
+    setPendingInviteDismissChecked(false);
+    setPendingInviteOpen(true);
+  }, [exchange?.transactionId, exchange?.state, canAcceptExchange, otherUserName]);
 
   const exchangeActionConfig = !exchange
     ? {
@@ -879,12 +1406,12 @@ export default function ChatScreen({ navigation, route }) {
         title: 'Pending',
         body: canAcceptExchange
           ? 'A start request is waiting for your acceptance. Accepting will move the exchange into progress.'
-          : 'A start request has been sent and is waiting for the other side to accept.',
-        primaryLabel: canAcceptExchange ? 'Accept' : 'Pending',
+          : 'You sent a start request and can still withdraw it before the other side accepts.',
+        primaryLabel: canAcceptExchange ? 'Accept' : 'Withdraw Pending',
         secondaryLabel: 'View Transaction',
-        onPrimary: canAcceptExchange ? acceptExchangeInChat : openTransaction,
+        onPrimary: canAcceptExchange ? acceptExchangeInChat : withdrawPendingExchangeInChat,
         onSecondary: openTransaction,
-          primaryTone: canAcceptExchange ? 'primary' : 'muted',
+          primaryTone: canAcceptExchange ? 'primary' : 'danger',
         }
       : exchange.state === 'in_progress' || exchange.state === 'due_soon'
         ? {
@@ -961,14 +1488,16 @@ export default function ChatScreen({ navigation, route }) {
         }]
         : []),
       ...(exchange.state === 'pending'
-        ? (canAcceptExchange ? [{
-          id: 'accept',
-          label: 'Accept',
-          helper: canAcceptExchange
-            ? 'Accept the start request and move the exchange into progress.'
-            : 'The request has been sent and is waiting for acceptance.',
-          onPress: acceptExchangeInChat,
-        }] : [])
+        ? (canAcceptExchange
+          ? []
+          : (exchange.pendingBy === exchange.myRole
+            ? [{
+              id: 'withdraw_pending',
+              label: 'Withdraw Pending',
+              helper: 'Cancel this pending start request so you can send a new one later.',
+              onPress: withdrawPendingExchangeInChat,
+            }]
+            : []))
         : []),
       ...((exchange.state === 'in_progress' || exchange.state === 'due_soon')
         ? (exchange.myRole === 'provider'
@@ -1029,14 +1558,13 @@ export default function ChatScreen({ navigation, route }) {
     };
     setMessages(prev => [...prev, newMsg]);
     setInput('');
-    setTimeout(() => scrollToLatest(true), 30);
 
     if (!user?.id) return;
 
     let chatId = dbChatId;
     // First message in a new chat — create the chat record in DB
     if (!chatId && chat?.user?.id) {
-      const saved = await createChat(user.id, chat.user.id);
+      const saved = await createChatWithPost(user.id, chat.user.id, chatPostId);
       if (saved?.id) {
         chatId = saved.id;
         setDbChatId(chatId);
@@ -1053,31 +1581,21 @@ export default function ChatScreen({ navigation, route }) {
     hasAutoScrolledRef.current = false;
     setShowScrollUpBtn(false);
     setShowScrollDownBtn(false);
-    const timer = setTimeout(() => {
-      scrollToLatest(false);
-      hasAutoScrolledRef.current = true;
-    }, 80);
-
-    return () => clearTimeout(timer);
   }, [chat?.id]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const chatId = dbChatId ?? effectiveChatId;
+      if (chatId) {
+        refreshChatExchange(chatId, chatPostId);
+      }
+    }, [dbChatId, effectiveChatId, refreshChatExchange, chatPostId])
+  );
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const didShowEvent = 'keyboardDidShow';
-    const handleKeyboardShow = () => {
-      scrollToLatest(true);
-      setTimeout(() => scrollToLatest(false), Platform.OS === 'ios' ? 180 : 100);
-    };
-
-    const keyboardShowSub = Keyboard.addListener(showEvent, handleKeyboardShow);
-    const keyboardDidShowSub = showEvent === didShowEvent
-      ? null
-      : Keyboard.addListener(didShowEvent, handleKeyboardShow);
-
-    return () => {
-      keyboardShowSub.remove();
-      keyboardDidShowSub?.remove();
-    };
+    return () => {};
   }, []);
 
   const attachmentDetailPanResponder = useMemo(() => PanResponder.create({
@@ -1126,7 +1644,6 @@ export default function ChatScreen({ navigation, route }) {
       setAttachmentStep('chooser');
       setAttachmentMode('photo');
       setSelectedLocationType('live');
-      setTimeout(() => scrollToLatest(true), 30);
       return;
     }
 
@@ -1151,7 +1668,6 @@ export default function ChatScreen({ navigation, route }) {
     setSelectedAttachmentSource('camera');
     setSelectedAttachmentProof('general');
     setSelectedLocationType('live');
-    setTimeout(() => scrollToLatest(true), 30);
   };
 
   const toggleMute = () => {
@@ -1207,11 +1723,17 @@ export default function ChatScreen({ navigation, route }) {
               {exchange ? `${exchange.statusLabel} • ${exchange.typeLabel}` : 'No exchange yet'}
             </Text>
             <Text style={styles.stickySubtitle} numberOfLines={1}>
-              {exchange ? exchange.countdownText : chat?.postTitle ?? 'Start an exchange when both sides are ready'}
+              {exchange ? exchange.countdownText : selectedTaskMeta.title ?? chat?.postTitle ?? 'Start an exchange when both sides are ready'}
             </Text>
           </View>
         </View>
         <View style={styles.stickyRightActions}>
+          <TouchableOpacity
+            style={styles.stickyMiniBtn}
+            onPress={() => setTaskSwitcherOpen(true)}
+          >
+            <Ionicons name="albums-outline" size={15} color={colors.primary} />
+          </TouchableOpacity>
           {exchange && <Ionicons name="time-outline" size={16} color={colors.textMuted} />}
           <TouchableOpacity
             style={styles.stickyActionBtn}
@@ -1277,16 +1799,16 @@ export default function ChatScreen({ navigation, route }) {
             <TouchableOpacity style={styles.taskCard} activeOpacity={0.9} onPress={openOriginalPost}>
               <View style={styles.taskCardTop}>
                 <View style={styles.taskTypeChip}>
-                  <Text style={styles.taskTypeChipText}>{postMeta.typeLabel}</Text>
+                  <Text style={styles.taskTypeChipText}>{selectedTaskMeta.typeLabel}</Text>
                 </View>
                 <Ionicons name="open-outline" size={18} color={colors.primary} />
               </View>
 
-              <Text style={styles.taskTitle}>{postMeta.title}</Text>
+              <Text style={styles.taskTitle}>{selectedTaskMeta.title}</Text>
 
               <View style={styles.taskMetaRow}>
                 <View style={styles.taskMetaChip}>
-                  <Text style={styles.taskMetaChipText}>{postMeta.category}</Text>
+                  <Text style={styles.taskMetaChipText}>{selectedTaskMeta.category}</Text>
                 </View>
                 <View style={styles.taskMetaChip}>
                   <Text style={styles.taskMetaChipText}>
@@ -1296,7 +1818,7 @@ export default function ChatScreen({ navigation, route }) {
               </View>
 
               <Text style={styles.taskDescription} numberOfLines={2}>
-                {postMeta.description}
+                {selectedTaskMeta.description}
               </Text>
 
               <View style={styles.taskFooter}>
@@ -1471,10 +1993,6 @@ export default function ChatScreen({ navigation, route }) {
           }}
           onContentSizeChange={(_, height) => {
             contentHeightRef.current = height;
-            if (!hasAutoScrolledRef.current) {
-              scrollToLatest(false);
-              hasAutoScrolledRef.current = true;
-            }
             updateScrollButtons(
               scrollOffsetRef.current,
               contentHeightRef.current,
@@ -1517,12 +2035,11 @@ export default function ChatScreen({ navigation, route }) {
             placeholderTextColor={colors.textMuted}
             value={input}
             onChangeText={setInput}
-            onFocus={() => {
-              scrollToLatest(true);
-              setTimeout(() => scrollToLatest(false), 160);
+            onSubmitEditing={() => {
+              if (input.trim()) send();
             }}
-            multiline
-            maxHeight={100}
+            returnKeyType="send"
+            blurOnSubmit={false}
           />
           <TouchableOpacity
             style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
@@ -1692,6 +2209,59 @@ export default function ChatScreen({ navigation, route }) {
         </Modal>
 
         <Modal
+          visible={pendingInviteOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPendingInviteOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setPendingInviteOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>Pending Request</Text>
+              <Text style={styles.popupBody}>
+                {otherUserName} sent a start request for this task. You can open task actions to accept or refuse it.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.dismissCheckRow}
+                activeOpacity={0.85}
+                onPress={() => setPendingInviteDismissChecked(prev => !prev)}
+              >
+                <View style={[styles.dismissCheckbox, pendingInviteDismissChecked && styles.dismissCheckboxChecked]}>
+                  {pendingInviteDismissChecked && (
+                    <Ionicons name="checkmark" size={14} color={colors.textWhite} />
+                  )}
+                </View>
+                <Text style={styles.dismissCheckText}>Do not show this reminder again for this request</Text>
+              </TouchableOpacity>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity
+                  style={styles.popupSecondaryBtn}
+                  onPress={() => {
+                    if (pendingInviteDismissChecked && exchange?.transactionId) {
+                      dismissedPendingTxRef.current.add(exchange.transactionId);
+                    }
+                    setPendingInviteOpen(false);
+                  }}
+                >
+                  <Text style={styles.popupSecondaryText}>Dismiss</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.popupSuccessBtn}
+                  onPress={() => {
+                    setPendingInviteOpen(false);
+                    setExchangeOptionsOpen(true);
+                  }}
+                >
+                  <Text style={styles.popupSuccessText}>Open Actions</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
           visible={completeConfirmOpen}
           transparent
           animationType="fade"
@@ -1845,6 +2415,31 @@ export default function ChatScreen({ navigation, route }) {
                 Pick the next task step from here, like pending, start, complete, or review.
               </Text>
 
+              {exchange?.state === 'pending' && canAcceptExchange && (
+                <View style={styles.dualPendingActions}>
+                  <TouchableOpacity
+                    style={[styles.dualPendingBtn, styles.dualPendingBtnRefuse]}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setExchangeOptionsOpen(false);
+                      setTimeout(() => refusePendingExchangeInChat(), 120);
+                    }}
+                  >
+                    <Text style={styles.dualPendingRefuseText}>Refuse</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.dualPendingBtn, styles.dualPendingBtnAccept]}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setExchangeOptionsOpen(false);
+                      setTimeout(() => acceptExchangeInChat(), 120);
+                    }}
+                  >
+                    <Text style={styles.dualPendingAcceptText}>Accept</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {exchangeQuickActions.map(action => (
                 <TouchableOpacity
                   key={action.id}
@@ -1911,11 +2506,61 @@ export default function ChatScreen({ navigation, route }) {
                 )}
               </ScrollView>
 
-              <TouchableOpacity style={styles.sheetPrimaryBtn} onPress={() => setStatusHistoryOpen(false)}>
-                <Text style={styles.sheetPrimaryText}>Close Timeline</Text>
+              <TouchableOpacity style={styles.menuPrimaryBtn} onPress={() => setStatusHistoryOpen(false)}>
+                <View style={styles.menuPrimaryContent}>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textWhite} />
+                  <Text style={styles.menuPrimaryText}>Close Timeline</Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
+        </Modal>
+
+        <Modal
+          visible={taskSwitcherOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setTaskSwitcherOpen(false)}
+        >
+          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setTaskSwitcherOpen(false)}>
+            <TouchableOpacity activeOpacity={1} style={styles.sheetCardWide}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Switch Task</Text>
+              <Text style={styles.sheetSubtitle}>Newest task is shown by default. You can switch back to older tasks in this chat.</Text>
+              <ScrollView style={styles.taskSwitchList} showsVerticalScrollIndicator persistentScrollbar>
+                {taskOptions.map((task, index) => {
+                  const selected = (task.postId ?? null) === (activeTaskPostId ?? null);
+                  return (
+                    <TouchableOpacity
+                      key={`${task.id}_${task.postId ?? 'none'}`}
+                      style={[styles.taskSwitchRow, selected && styles.taskSwitchRowActive]}
+                      onPress={() => {
+                        manualTaskSelectionRef.current = true;
+                        setSelectedTaskPostId(task.postId ?? null);
+                        setSelectedTaskId(task.transactionId ?? null);
+                        setTaskSwitcherOpen(false);
+                      }}
+                    >
+                      <View style={styles.taskSwitchCopy}>
+                        <View style={styles.taskSwitchTop}>
+                          <Text style={styles.taskSwitchTitle} numberOfLines={1}>{task.title}</Text>
+                          {index === 0 && <Text style={styles.taskSwitchBadge}>Latest</Text>}
+                        </View>
+                        <Text style={styles.taskSwitchMeta} numberOfLines={1}>
+                          {task.statusLabel} • {task.category}
+                        </Text>
+                      </View>
+                      {selected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => setTaskSwitcherOpen(false)}>
+                <Ionicons name="close-circle-outline" size={16} color={colors.textWhite} />
+                <Text style={styles.modalPrimaryText}>Close Tasks</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </TouchableOpacity>
         </Modal>
 
         <Modal
@@ -1930,51 +2575,75 @@ export default function ChatScreen({ navigation, route }) {
               <View style={styles.sheetHandle} />
               <Text style={styles.sheetTitle}>Start Exchange</Text>
               <Text style={styles.sheetSub}>
-                Choose the correct exchange type before the formal tracking flow begins.
+                The exchange type follows the original post category when it is clear. Only ambiguous posts need a manual choice.
               </Text>
 
               <View style={styles.sheetSummary}>
                 <Text style={styles.sheetSummaryLabel}>Post</Text>
                 <Text style={styles.sheetSummaryValue}>{chat?.postTitle ?? 'Exchange'}</Text>
                 <Text style={styles.sheetSummaryMeta}>
-                  Provider: {otherUserName} • Requester: Alex Chen
+                  Provider: {previewRoles.provider.name} • Requester: {previewRoles.requester.name}
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={[styles.typeOption, draftExchangeType === 'borrow' && styles.typeOptionActive]}
-                onPress={() => setDraftExchangeType('borrow')}
-              >
-                <View style={styles.typeOptionCopy}>
-                  <Text style={styles.typeOptionTitle}>Borrowed item</Text>
-                  <Text style={styles.typeOptionBody}>
-                    Use this for lending or borrowing objects. One side sends a start request first, then the other side accepts to begin the exchange.
-                  </Text>
-                </View>
-                {draftExchangeType === 'borrow' && (
+              {autoExchangeType === 'borrow' ? (
+                <View style={[styles.typeOption, styles.typeOptionActive]}>
+                  <View style={styles.typeOptionCopy}>
+                    <Text style={styles.typeOptionTitle}>Borrowed item</Text>
+                    <Text style={styles.typeOptionBody}>
+                      This post category is item-based, so the exchange is locked as a borrowed-item flow.
+                    </Text>
+                  </View>
                   <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                )}
-              </TouchableOpacity>
+                </View>
+              ) : autoExchangeType === 'service' ? (
+                <View style={[styles.typeOption, styles.typeOptionActive]}>
+                  <View style={styles.typeOptionCopy}>
+                    <Text style={styles.typeOptionTitle}>Help / service</Text>
+                    <Text style={styles.typeOptionBody}>
+                      This post category is task-based, so the exchange is locked as a help/service flow.
+                    </Text>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.typeOption, draftExchangeType === 'borrow' && styles.typeOptionActive]}
+                    onPress={() => setDraftExchangeType('borrow')}
+                  >
+                    <View style={styles.typeOptionCopy}>
+                      <Text style={styles.typeOptionTitle}>Borrowed item</Text>
+                      <Text style={styles.typeOptionBody}>
+                        Use this for lending or borrowing objects. One side sends a start request first, then the other side accepts to begin the exchange.
+                      </Text>
+                    </View>
+                    {draftExchangeType === 'borrow' && (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.typeOption, draftExchangeType === 'service' && styles.typeOptionActive]}
-                onPress={() => setDraftExchangeType('service')}
-              >
-                <View style={styles.typeOptionCopy}>
-                  <Text style={styles.typeOptionTitle}>Help / service</Text>
-                  <Text style={styles.typeOptionBody}>
-                    Use this for one-off help tasks. One side sends a start request first, then the other side accepts to begin the exchange.
-                  </Text>
-                </View>
-                {draftExchangeType === 'service' && (
-                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                )}
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.typeOption, draftExchangeType === 'service' && styles.typeOptionActive]}
+                    onPress={() => setDraftExchangeType('service')}
+                  >
+                    <View style={styles.typeOptionCopy}>
+                      <Text style={styles.typeOptionTitle}>Help / service</Text>
+                      <Text style={styles.typeOptionBody}>
+                        Use this for one-off help tasks. One side sends a start request first, then the other side accepts to begin the exchange.
+                      </Text>
+                    </View>
+                    {draftExchangeType === 'service' && (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
 
               <View style={styles.ruleCard}>
                 <Text style={styles.ruleTitle}>What happens next</Text>
                 <Text style={styles.ruleBody}>
-                  {draftExchangeType === 'service'
+                  {(autoExchangeType ?? draftExchangeType) === 'service'
                     ? 'The exchange will be created in pending state. Countdown begins after the other side accepts the request.'
                     : 'The exchange will be created in pending state. Countdown begins after the other side accepts the request.'}
                 </Text>
@@ -2096,6 +2765,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  stickyMiniBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primary + '22',
   },
   stickyActionText: {
     ...typography.caption,
@@ -2323,6 +3002,35 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
   },
+  dualPendingActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  dualPendingBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  dualPendingBtnAccept: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dualPendingBtnRefuse: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+  },
+  dualPendingAcceptText: {
+    ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  dualPendingRefuseText: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
   gateNotice: {
     backgroundColor: colors.warning + '22',
     padding: 10,
@@ -2540,10 +3248,82 @@ const styles = StyleSheet.create({
     ...typography.h3,
     color: colors.textPrimary,
   },
+  sheetSubtitle: {
+    ...typography.small,
+    color: colors.textSecondary,
+    marginTop: -6,
+    lineHeight: 19,
+  },
   sheetSub: {
     ...typography.small,
     color: colors.textSecondary,
     marginTop: -6,
+  },
+  sheetCardWide: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 26,
+    gap: 14,
+    maxHeight: '72%',
+  },
+  taskSwitchList: {
+    maxHeight: 320,
+  },
+  taskSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: colors.card,
+    marginBottom: 10,
+  },
+  taskSwitchRowActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  taskSwitchCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  taskSwitchTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  taskSwitchTitle: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  taskSwitchBadge: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  taskSwitchMeta: {
+    ...typography.small,
+    color: colors.textSecondary,
+  },
+  modalPrimaryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  modalPrimaryText: {
+    ...typography.bodyBold,
+    color: colors.textWhite,
   },
   sheetSummary: {
     backgroundColor: colors.surface,
@@ -2882,6 +3662,32 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   popupBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  dismissCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: -2,
+  },
+  dismissCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissCheckboxChecked: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dismissCheckText: {
+    flex: 1,
     ...typography.small,
     color: colors.textSecondary,
     lineHeight: 20,

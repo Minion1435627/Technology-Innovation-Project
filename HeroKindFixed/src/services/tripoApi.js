@@ -13,11 +13,28 @@
 
 const BASE_URL = 'https://api.tripo3d.ai/v2/openapi';
 const API_KEY = process.env.EXPO_PUBLIC_TRIPO_API_KEY ?? '';
+const UPLOAD_TIMEOUT_MS = 90_000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function authHeaders() {
   return { Authorization: `Bearer ${API_KEY}` };
+}
+
+function extractFileUrl(fileLike) {
+  if (!fileLike) return null;
+  if (typeof fileLike === 'string') return fileLike;
+  return fileLike.url ?? null;
+}
+
+function extractModelUrl(output) {
+  return (
+    extractFileUrl(output?.pbr_model) ??
+    extractFileUrl(output?.model_mesh) ??
+    extractFileUrl(output?.model) ??
+    extractFileUrl(output?.base_model) ??
+    null
+  );
 }
 
 async function parseResponse(response) {
@@ -36,18 +53,33 @@ async function parseResponse(response) {
  * @returns {Promise<string>} image_token to use when creating a task
  */
 export async function uploadImage(imageUri) {
-  const filename = imageUri.split('/').pop() ?? 'avatar.jpg';
-  const ext = filename.split('.').pop().toLowerCase();
-  const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+  const originalFilename = imageUri.split('/').pop() ?? 'avatar.jpg';
+  const lowerName = originalFilename.toLowerCase();
+  const mimeType = lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg';
+  const uploadName = mimeType === 'image/png' ? 'avatar.png' : 'avatar.jpg';
 
   const form = new FormData();
-  form.append('file', { uri: imageUri, name: filename, type: mimeType });
+  form.append('file', { uri: imageUri, name: uploadName, type: mimeType });
 
-  const response = await fetch(`${BASE_URL}/upload`, {
-    method: 'POST',
-    headers: authHeaders(),   // Content-Type set automatically for FormData
-    body: form,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}/upload`, {
+      method: 'POST',
+      headers: authHeaders(),   // Content-Type set automatically for FormData
+      body: form,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Uploading photo timed out. Please try a smaller image or try again.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const data = await parseResponse(response);
   return data.image_token;
@@ -62,13 +94,17 @@ export async function uploadImage(imageUri) {
  * @returns {Promise<string>} task_id
  */
 export async function createImageTo3DTask(imageToken, fileType = 'jpg') {
+  return createTask({
+    type: 'image_to_model',
+    file: { type: fileType, file_token: imageToken },
+  });
+}
+
+async function createTask(payload) {
   const response = await fetch(`${BASE_URL}/task`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'image_to_model',
-      file: { type: fileType, file_token: imageToken },
-    }),
+    body: JSON.stringify(payload),
   });
 
   const data = await parseResponse(response);
@@ -98,6 +134,20 @@ export async function getTaskStatus(taskId) {
   return parseResponse(response);
 }
 
+export async function getTaskOutputUrls(taskId) {
+  if (!taskId) {
+    throw new Error('Missing avatar task id.');
+  }
+
+  const task = await getTaskStatus(taskId);
+  return {
+    taskId,
+    status: task.status,
+    modelUrl: extractModelUrl(task.output),
+    renderedImageUrl: extractFileUrl(task.output?.rendered_image),
+  };
+}
+
 /**
  * Poll a task until it reaches a terminal state (success / failed / cancelled).
  *
@@ -124,13 +174,8 @@ export function waitForCompletion(taskId, onProgress, intervalMs = 3000, timeout
         if (task.status === 'success') {
           console.log('[Tripo] task.output raw:', JSON.stringify(task.output, null, 2));
 
-          // pbr_model may be an object { url, type } or (rarely) a plain string
-          const rawModel = task.output?.pbr_model;
-          const modelUrl = typeof rawModel === 'string' ? rawModel : (rawModel?.url ?? null);
-
-          // rendered_image may be an object { url, type } or a plain string
-          const rawImage = task.output?.rendered_image;
-          const renderedImageUrl = typeof rawImage === 'string' ? rawImage : (rawImage?.url ?? null);
+          const modelUrl = extractModelUrl(task.output);
+          const renderedImageUrl = extractFileUrl(task.output?.rendered_image);
 
           console.log('[Tripo] modelUrl:', modelUrl);
           console.log('[Tripo] renderedImageUrl:', renderedImageUrl);
@@ -169,5 +214,133 @@ export async function generateAvatarFromImage(imageUri, onProgress) {
 
   const imageToken = await uploadImage(imageUri);
   const taskId = await createImageTo3DTask(imageToken, fileType);
+  onProgress?.(0, 'queued', 'generation');
+  const baseModel = await waitForCompletion(taskId, (pct, status) => {
+    const scaledPct = Math.round((pct ?? 0) * 0.55);
+    onProgress?.(scaledPct, status, 'generation');
+  });
+
+  onProgress?.(55, 'queued', 'texturing');
+  const texturedModel = await textureAvatarFromTask(taskId, {
+    image: {
+      type: fileType,
+      file_token: imageToken,
+    },
+  }, (pct, status) => {
+    const scaledPct = 55 + Math.round((pct ?? 0) * 0.45);
+    onProgress?.(scaledPct, status, 'texturing');
+  });
+
+  return {
+    taskId: texturedModel.taskId,
+    modelUrl: texturedModel.modelUrl ?? baseModel.modelUrl,
+    baseModelUrl: baseModel.modelUrl,
+    textureModelUrl: texturedModel.modelUrl ?? null,
+    renderedImageUrl: texturedModel.renderedImageUrl ?? baseModel.renderedImageUrl,
+    sourceTaskId: taskId,
+  };
+}
+
+async function runTaskAndWait(payload, onProgress) {
+  const taskId = await createTask(payload);
   return waitForCompletion(taskId, onProgress);
+}
+
+export async function textureAvatarFromTask(originalTaskId, texturePrompt, onProgress) {
+  if (!originalTaskId) {
+    throw new Error('Missing avatar task id.');
+  }
+
+  const payload = {
+    type: 'texture_model',
+    original_model_task_id: originalTaskId,
+    texture: true,
+    pbr: false,
+    bake: true,
+    texture_alignment: 'original_image',
+    texture_quality: 'detailed',
+    model_version: 'v3.0-20250812',
+  };
+
+  if (texturePrompt) {
+    payload.texture_prompt = texturePrompt;
+  }
+
+  const result = await runTaskAndWait(
+    payload,
+    (pct, status) => onProgress?.(pct, status)
+  );
+
+  try {
+    const task = await getTaskStatus(result.taskId);
+    console.log('[Tripo][texture_model] task.output raw:', JSON.stringify(task.output, null, 2));
+    console.log('[Tripo][texture_model] extracted modelUrl:', extractModelUrl(task.output));
+    console.log('[Tripo][texture_model] extracted renderedImageUrl:', extractFileUrl(task.output?.rendered_image));
+  } catch (err) {
+    console.warn('[Tripo][texture_model] failed to inspect task output:', err);
+  }
+
+  return result;
+}
+
+export async function animateAvatarFromTask(originalTaskId, animation = 'preset:idle', onProgress) {
+  if (!originalTaskId) {
+    throw new Error('Missing avatar task id.');
+  }
+
+  const preregcheck = await runTaskAndWait(
+    {
+      type: 'animate_prerigcheck',
+      original_model_task_id: originalTaskId,
+    },
+    (pct, status) => onProgress?.({ step: 'Checking avatar', pct, status })
+  );
+
+  const preregcheckTask = await getTaskStatus(preregcheck.taskId);
+  const riggable = preregcheckTask?.output?.riggable;
+  if (riggable === false) {
+    throw new Error('This avatar cannot be animated automatically yet.');
+  }
+
+  const rig = await runTaskAndWait(
+    {
+      type: 'animate_rig',
+      original_model_task_id: originalTaskId,
+      out_format: 'glb',
+      spec: 'tripo',
+    },
+    (pct, status) => onProgress?.({ step: 'Preparing movement', pct, status })
+  );
+
+  const animated = await runTaskAndWait(
+    {
+      type: 'animate_retarget',
+      original_model_task_id: rig.taskId,
+      animation,
+      out_format: 'glb',
+      bake_animation: true,
+    },
+    (pct, status) => onProgress?.({ step: 'Applying animation', pct, status })
+  );
+
+  try {
+    const task = await getTaskStatus(animated.taskId);
+    console.log('[Tripo][animate_retarget] task.output raw:', JSON.stringify(task.output, null, 2));
+    console.log('[Tripo][animate_retarget] extracted modelUrl:', extractModelUrl(task.output));
+    console.log('[Tripo][animate_retarget] extracted renderedImageUrl:', extractFileUrl(task.output?.rendered_image));
+  } catch (err) {
+    console.warn('[Tripo][animate_retarget] failed to inspect task output:', err);
+  }
+
+  if (!animated.modelUrl) {
+    throw new Error('Animation finished, but no animated model file was returned.');
+  }
+
+  return {
+    rigTaskId: rig.taskId,
+    animatedTaskId: animated.taskId,
+    rigType: preregcheckTask?.output?.rig_type ?? null,
+    modelUrl: animated.modelUrl,
+    renderedImageUrl: animated.renderedImageUrl,
+  };
 }

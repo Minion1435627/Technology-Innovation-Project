@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { PostsProvider } from '../context/PostsContext';
 import { ChatProvider } from '../context/ChatContext';
@@ -9,6 +9,9 @@ import { AuthProvider } from '../context/AuthContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useChats } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
+import { fetchUnreadNotifications, markNotificationRead } from '../lib/db';
 
 
 import { colors } from '../theme/colors';
@@ -42,6 +45,10 @@ import CommunityGuidelinesScreen from '../screens/support/CommunityGuidelinesScr
 import GamesScreen from '../screens/GamesScreen';
 import FarmerScreen from '../screens/minigames/FarmerScreen';
 import FisherScreen from '../screens/minigames/FisherScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
+import TasksScreen from '../screens/TasksScreen';
+
+const AUTH_ROUTE_NAMES = new Set(['Cover', 'Login', 'Register', 'Onboarding']);
 
 const AuthStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator();
@@ -110,6 +117,8 @@ function MainNavigator() {
       <MainStack.Screen name="UserProfile" component={UserProfileScreen} />
       <MainStack.Screen name="Transaction" component={TransactionScreen} />
       <MainStack.Screen name="Settings" component={SettingsScreen} />
+      <MainStack.Screen name="EditProfile" component={EditProfileScreen} />
+      <MainStack.Screen name="Tasks" component={TasksScreen} />
       <MainStack.Screen name="WhoCanMessage" component={WhoCanMessageScreen} />
       <MainStack.Screen name="LocationSettings" component={LocationSettingsScreen} />
       <MainStack.Screen name="ReportSafetyIssue" component={ReportSafetyIssueScreen} />
@@ -120,9 +129,137 @@ function MainNavigator() {
   );
 }
 
+function PendingInviteWatcher({ navigationRef, currentRouteName }) {
+  const { chats } = useChats();
+  const { user } = useAuth();
+  const alertedTxRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!user?.id || !navigationRef?.current?.isReady?.()) return;
+    if (!currentRouteName || AUTH_ROUTE_NAMES.has(currentRouteName)) return;
+
+    const pendingInvite = chats.find(chat =>
+      chat.exchange?.state === 'pending' &&
+      chat.exchange?.pendingBy &&
+      chat.exchange?.pendingBy !== chat.exchange?.myRole &&
+      chat.exchange?.transactionId
+    );
+
+    if (!pendingInvite?.exchange?.transactionId) return;
+    if (alertedTxRef.current.has(pendingInvite.exchange.transactionId)) return;
+
+    const currentRoute = navigationRef.current.getCurrentRoute?.();
+    if (
+      currentRoute?.name === 'ChatDetail' &&
+      currentRoute?.params?.chat?.id === pendingInvite.id
+    ) {
+      alertedTxRef.current.add(pendingInvite.exchange.transactionId);
+      return;
+    }
+
+    alertedTxRef.current.add(pendingInvite.exchange.transactionId);
+
+    Alert.alert(
+      'Pending Request',
+      `${pendingInvite.user?.name ?? 'Someone'} sent a start request. Open the chat to review or accept it.`,
+      [
+        { text: 'Later', style: 'cancel' },
+        {
+          text: 'Open Chat',
+          onPress: () => navigationRef.current?.navigate('ChatDetail', { chat: pendingInvite }),
+        },
+      ]
+    );
+  }, [chats, currentRouteName, navigationRef, user?.id]);
+
+  return null;
+}
+
+function ExchangeNotificationWatcher({ navigationRef, currentRouteName }) {
+  const { chats } = useChats();
+  const { user } = useAuth();
+  const alertedNotificationIdsRef = useRef(new Set());
+  const showingAlertRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const showUnreadNotification = async () => {
+      if (!user?.id || !navigationRef?.current?.isReady?.()) return;
+      if (!currentRouteName || AUTH_ROUTE_NAMES.has(currentRouteName)) return;
+      if (showingAlertRef.current) return;
+
+      const unread = await fetchUnreadNotifications(user.id);
+      if (cancelled || !unread.length) return;
+
+      const refusedNotification = unread.find(item =>
+        item.type === 'exchange_refused' &&
+        !alertedNotificationIdsRef.current.has(item.id)
+      );
+
+      if (!refusedNotification) return;
+
+      const relatedChat = refusedNotification.reference_type === 'chat'
+        ? chats.find(chat => chat.id === refusedNotification.reference_id)
+        : null;
+
+      const currentRoute = navigationRef.current?.getCurrentRoute?.();
+      if (
+        currentRoute?.name === 'ChatDetail' &&
+        refusedNotification.reference_type === 'chat' &&
+        currentRoute?.params?.chat?.id === refusedNotification.reference_id
+      ) {
+        alertedNotificationIdsRef.current.add(refusedNotification.id);
+        await markNotificationRead(refusedNotification.id);
+        return;
+      }
+
+      alertedNotificationIdsRef.current.add(refusedNotification.id);
+      showingAlertRef.current = true;
+
+      Alert.alert(
+        refusedNotification.title || 'Start Request Refused',
+        refusedNotification.body || 'Your start request was refused.',
+        [
+          {
+            text: 'Dismiss',
+            style: 'cancel',
+            onPress: () => {
+              showingAlertRef.current = false;
+              markNotificationRead(refusedNotification.id);
+            },
+          },
+          {
+            text: 'Open Chat',
+            onPress: async () => {
+              showingAlertRef.current = false;
+              await markNotificationRead(refusedNotification.id);
+              if (relatedChat) {
+                navigationRef.current?.navigate('ChatDetail', { chat: relatedChat });
+              }
+            },
+          },
+        ]
+      );
+    };
+
+    showUnreadNotification();
+    const intervalId = setInterval(showUnreadNotification, 4000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [chats, currentRouteName, navigationRef, user?.id]);
+
+  return null;
+}
+
 export default function AppNavigator() {
   // Set to true to skip auth for development preview
   const isLoggedIn = false;
+  const navigationRef = useRef(null);
+  const [currentRouteName, setCurrentRouteName] = React.useState(null);
 
   return (
     <AuthProvider>
@@ -130,7 +267,17 @@ export default function AppNavigator() {
     <FriendsProvider>
     <PostsProvider>
     <ChatProvider>
-      <NavigationContainer>
+      <NavigationContainer
+        ref={navigationRef}
+        onReady={() => {
+          setCurrentRouteName(navigationRef.current?.getCurrentRoute?.()?.name ?? null);
+        }}
+        onStateChange={() => {
+          setCurrentRouteName(navigationRef.current?.getCurrentRoute?.()?.name ?? null);
+        }}
+      >
+        <PendingInviteWatcher navigationRef={navigationRef} currentRouteName={currentRouteName} />
+        <ExchangeNotificationWatcher navigationRef={navigationRef} currentRouteName={currentRouteName} />
         {isLoggedIn ? (
           <MainNavigator />
         ) : (

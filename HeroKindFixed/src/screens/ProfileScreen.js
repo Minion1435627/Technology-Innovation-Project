@@ -1,18 +1,23 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Alert,
+  ScrollView, Alert, Image, ActivityIndicator, PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
+import Avatar3DViewer from '../components/Avatar3DViewer';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements } from '../lib/db';
+import { copyRemoteAvatarImageToStorage, copyRemoteAvatarToStorage, fetchUserReviews, fetchTransactions, fetchLeaderboard, fetchUserAchievements, getAvatarPublicUrl } from '../lib/db';
 import { usePosts } from '../context/PostsContext';
 import { useFriends } from '../context/FriendsContext';
 import { useChats } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
+import { animateAvatarFromTask, generateAvatarFromImage, getTaskOutputUrls } from '../services/tripoApi';
+
+const GEN_STATE = { IDLE: 'idle', UPLOADING: 'uploading', GENERATING: 'generating', DONE: 'done', ERROR: 'error' };
 
 const LEVEL_NAMES  = ['Newcomer', 'Helper', 'Trusted Neighbour', 'Community Pillar', 'Legend'];
 const LEVEL_EMOJIS = ['🌱', '⭐', '🏅', '💎', '👑'];
@@ -24,6 +29,31 @@ const XP_LEVELS = [
   { level: 4, xp: 500 },
   { level: 5, xp: 1000 },
 ];
+
+const ROTATION_STEP = 45;
+const DEFAULT_MODEL_ROTATION = 90;
+const ANIMATION_OPTIONS = [
+  { label: 'Idle', value: 'preset:idle' },
+  { label: 'Turn', value: 'preset:turn' },
+  { label: 'Walk', value: 'preset:walk' },
+  { label: 'Run', value: 'preset:run' },
+  { label: 'Jump', value: 'preset:jump' },
+];
+
+function normalizeDegrees(value) {
+  return ((value % 360) + 360) % 360;
+}
+
+function getRotationLabel(value) {
+  const rounded = Math.round(value);
+  const normalized = normalizeDegrees(rounded);
+
+  if (rounded > 0 && normalized === 0) return 360;
+  if (rounded < 0 && normalized === 0) return -360;
+  if (rounded < 0) return normalized - 360;
+
+  return normalized;
+}
 
 const getLevelFromXp = (xp) =>
   XP_LEVELS.reduce((lvl, rule) => (xp ?? 0) >= rule.xp ? rule.level : lvl, 1);
@@ -69,11 +99,46 @@ export default function ProfileScreen({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [weeklyRank, setWeeklyRank] = useState(null);
   const [unlockedKeys, setUnlockedKeys] = useState([]);
+  const [genState, setGenState] = useState(GEN_STATE.IDLE);
+  const [genProgress, setGenProgress] = useState(0);
+  const [genError, setGenError] = useState('');
+  const [genLabel, setGenLabel] = useState('');
+  const [modelRotation, setModelRotation] = useState(DEFAULT_MODEL_ROTATION);
+  const [animateState, setAnimateState] = useState('idle');
+  const [animateLabel, setAnimateLabel] = useState('');
+  const [selectedAnimation, setSelectedAnimation] = useState('preset:idle');
+  const [previewMode, setPreviewMode] = useState('preview');
+  const [refreshingAvatarUrl, setRefreshingAvatarUrl] = useState(false);
   const { posts, removePost } = usePosts();
   const { friends } = useFriends();
   const { chats } = useChats();
-  const { profile, user: authUser } = useAuth();
+  const { profile, user: authUser, patchProfile } = useAuth();
   const user = profile;
+  const storedAvatarUrl = getAvatarPublicUrl(user?.avatar_storage_path);
+  const previewSources = [
+    { key: 'preview', label: 'Preview', imageUrl: user?.avatar_image_url || null, url: null },
+    { key: 'base', label: 'Base', url: storedAvatarUrl || user?.avatar_url || null },
+    { key: 'animated', label: 'Animated', url: user?.avatar_animated_url || null },
+  ];
+  const activePreviewSource = previewSources.find(source => source.key === previewMode) ?? previewSources[0];
+  const activeAvatarUrl = activePreviewSource?.url ?? null;
+  const activePreviewImageUrl = activePreviewSource?.imageUrl ?? null;
+  const availablePreviewSources = previewSources.filter(source => source.url || source.imageUrl);
+
+  useEffect(() => {
+    if (activeAvatarUrl && genState === GEN_STATE.DONE) {
+      setGenState(GEN_STATE.IDLE);
+      setGenLabel('');
+      setGenProgress(0);
+    }
+  }, [activeAvatarUrl, genState]);
+
+  useEffect(() => {
+    const selectedSource = previewSources.find(source => source.key === previewMode);
+    if (!selectedSource?.url && !selectedSource?.imageUrl) {
+      setPreviewMode(user?.avatar_image_url ? 'preview' : 'base');
+    }
+  }, [previewMode, user?.avatar_url, user?.avatar_animated_url, user?.avatar_image_url]);
 
   useEffect(() => {
     if (!authUser?.id) return;
@@ -149,6 +214,218 @@ export default function ProfileScreen({ navigation }) {
     ? `Help ${Math.max(1, Math.ceil(xpRemaining / 100))} more neighbour${xpRemaining > 100 ? 's' : ''} to reach Level ${computedLevel + 1}`
     : 'You have reached the highest level!';
 
+  const rotationStartRef = useRef(modelRotation);
+  const avatarPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 3,
+      onPanResponderGrant: () => {
+        rotationStartRef.current = modelRotation;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const nextRotation = rotationStartRef.current + gestureState.dx * 0.7;
+        setModelRotation(nextRotation);
+      },
+    })
+  ).current;
+
+  const rotateByStep = (delta) => {
+    setModelRotation((current) => current + delta);
+  };
+
+  const isGenerating = genState === GEN_STATE.UPLOADING || genState === GEN_STATE.GENERATING;
+
+  const refreshAvatarUrlFromTask = async () => {
+    if (!user?.avatar_task_id || refreshingAvatarUrl) return;
+
+    try {
+      setRefreshingAvatarUrl(true);
+      const latest = await getTaskOutputUrls(user.avatar_task_id);
+
+      if (!latest.modelUrl) {
+        throw new Error('The latest avatar file is not available yet.');
+      }
+
+      const targetField =
+        previewMode === 'animated' ? 'avatar_animated_url' : 'avatar_url';
+
+      let stored = null;
+      let storedImage = null;
+      if (authUser?.id) {
+        try {
+          stored = await copyRemoteAvatarToStorage(authUser.id, latest.modelUrl);
+          if (latest.renderedImageUrl) {
+            storedImage = await copyRemoteAvatarImageToStorage(authUser.id, latest.renderedImageUrl, `avatar-preview-${Date.now()}.png`);
+          }
+        } catch (storageErr) {
+          console.warn('[Avatar3D] storage refresh fallback:', storageErr);
+        }
+      }
+
+      await patchProfile({
+        [targetField]: stored?.publicUrl ?? latest.modelUrl,
+        avatar_storage_path: stored?.storagePath ?? user?.avatar_storage_path ?? null,
+        avatar_image_url: storedImage?.publicUrl ?? latest.renderedImageUrl ?? user.avatar_image_url,
+      });
+    } catch (err) {
+      console.warn('[Avatar3D] failed to refresh signed URL:', err);
+    } finally {
+      setRefreshingAvatarUrl(false);
+    }
+  };
+
+  const handleAvatarLoadError = (err) => {
+    const message = err?.message ?? String(err);
+    if (message.includes('403')) {
+      refreshAvatarUrlFromTask();
+      return;
+    }
+
+    if (previewMode === 'animated') {
+      console.warn('[Avatar3D] animated preview failed, falling back to base');
+      setPreviewMode(user?.avatar_url ? 'base' : 'preview');
+    }
+  };
+
+  const handlePreviewImageError = () => {
+    console.warn('[Avatar3D] preview image failed to load:', activePreviewImageUrl);
+    if (storedAvatarUrl || user?.avatar_url) {
+      setPreviewMode('base');
+      return;
+    }
+    if (user?.avatar_animated_url) {
+      setPreviewMode('animated');
+    }
+  };
+
+  const pickAndGenerate = async () => {
+    if (isGenerating) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo library access to upload a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const uri = result.assets[0].uri;
+    setGenState(GEN_STATE.UPLOADING);
+    setGenProgress(0);
+    setGenError('');
+    setGenLabel('');
+
+    try {
+      const gen = await generateAvatarFromImage(uri, (pct, status, phase) => {
+        setGenProgress(pct);
+        if (status === 'running' || status === 'queued') setGenState(GEN_STATE.GENERATING);
+        setGenLabel(phase === 'texturing' ? 'Adding colour to your avatar…' : 'Generating 3D avatar…');
+      });
+      setGenState(GEN_STATE.DONE);
+      let storedBase = null;
+      let storedTexture = null;
+      let storedImage = null;
+      if (authUser?.id) {
+        try {
+          storedBase = await copyRemoteAvatarToStorage(authUser.id, gen.baseModelUrl ?? gen.modelUrl, `avatar-base-${Date.now()}.glb`);
+          if (gen.textureModelUrl) {
+            storedTexture = await copyRemoteAvatarToStorage(authUser.id, gen.textureModelUrl, `avatar-texture-${Date.now()}.glb`);
+          }
+          if (gen.renderedImageUrl) {
+            storedImage = await copyRemoteAvatarImageToStorage(authUser.id, gen.renderedImageUrl, `avatar-preview-${Date.now()}.png`);
+          }
+        } catch (storageErr) {
+          console.warn('[Avatar3D] avatar storage fallback during generation:', storageErr?.message ?? String(storageErr));
+        }
+      }
+      await patchProfile({
+        avatar_url: storedBase?.publicUrl ?? gen.baseModelUrl ?? gen.modelUrl,
+        avatar_storage_path: storedBase?.storagePath ?? null,
+        avatar_texture_url: storedTexture?.publicUrl ?? gen.textureModelUrl ?? null,
+        avatar_animated_url: null,
+        avatar_image_url: storedImage?.publicUrl ?? gen.renderedImageUrl,
+        avatar_task_id: gen.taskId,
+      });
+      console.log('[Avatar3D] saved profile urls:', JSON.stringify({
+        avatar_url: storedBase?.publicUrl ?? gen.baseModelUrl ?? gen.modelUrl,
+        avatar_storage_path: storedBase?.storagePath ?? null,
+        avatar_texture_url: storedTexture?.publicUrl ?? gen.textureModelUrl ?? null,
+        avatar_image_url: storedImage?.publicUrl ?? gen.renderedImageUrl,
+      }, null, 2));
+      setGenState(GEN_STATE.IDLE);
+      setGenLabel('');
+      setGenProgress(0);
+    } catch (err) {
+      setGenError(err.message ?? 'Generation failed. Please try again.');
+      setGenState(GEN_STATE.ERROR);
+    }
+  };
+
+  const handleAnimateAvatar = async () => {
+    if (animateState === 'running') return;
+    if (!user.avatar_task_id) {
+      Alert.alert('Animation unavailable', 'This avatar needs to be generated again before motion can be added.');
+      return;
+    }
+
+    try {
+      setAnimateState('running');
+      setAnimateLabel('Checking avatar...');
+
+      const result = await animateAvatarFromTask(user.avatar_task_id, selectedAnimation, ({ step, pct }) => {
+        setAnimateLabel(`${step}${typeof pct === 'number' ? ` ${pct}%` : ''}`);
+      });
+
+      if (!result.modelUrl) {
+        throw new Error('The animation step did not return a usable 3D file.');
+      }
+
+      let stored = null;
+      let storedImage = null;
+      if (authUser?.id) {
+        try {
+          stored = await copyRemoteAvatarToStorage(authUser.id, result.modelUrl);
+          if (result.renderedImageUrl) {
+            storedImage = await copyRemoteAvatarImageToStorage(authUser.id, result.renderedImageUrl, `avatar-preview-${Date.now()}.png`);
+          }
+        } catch (storageErr) {
+          console.warn('[Avatar3D] avatar storage fallback during animation:', storageErr?.message ?? String(storageErr));
+        }
+      }
+
+      await patchProfile({
+        avatar_animated_url: stored?.publicUrl ?? result.modelUrl,
+        avatar_image_url: storedImage?.publicUrl ?? result.renderedImageUrl ?? user.avatar_image_url,
+        avatar_task_id: result.animatedTaskId,
+      });
+
+      setAnimateState('idle');
+      setAnimateLabel('');
+      const selectedLabel = ANIMATION_OPTIONS.find(option => option.value === selectedAnimation)?.label ?? 'Selected';
+      Alert.alert('Animation ready', `${selectedLabel} motion is now applied to your avatar.`);
+    } catch (err) {
+      setAnimateState('error');
+      setAnimateLabel('');
+      Alert.alert('Animation unavailable', err.message ?? 'We could not add movement to this avatar.');
+    }
+  };
+
+  const openOwnPostDetail = (post) => {
+    navigation.navigate('PostDetail', {
+      post: {
+        ...post,
+        typeLabel: post.type === 'need' ? 'Need' : post.type === 'supply' ? 'Supply' : 'Post',
+        ownerName: user.name,
+        ownerId: user.id,
+        ownerStars: user.stars,
+        ownerGender: user.gender,
+        exchangeSummary: 'Manage this post, review responses, or continue the exchange flow from chat.',
+      },
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
@@ -160,13 +437,6 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.topActions}>
           <Text style={styles.pageTitle}>Profile</Text>
           <View style={styles.topRight}>
-            <TouchableOpacity
-              style={styles.topPillBtn}
-              onPress={() => navigation.navigate('Leaderboard')}
-            >
-              <Ionicons name="trophy" size={14} color={colors.primary} />
-              <Text style={styles.topPillText}>Leaderboard</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconBtn}
               onPress={() => navigation.navigate('Settings')}
@@ -202,7 +472,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnPrimary]}
-              onPress={() => Alert.alert('Edit Profile', 'Edit profile coming soon.')}
+              onPress={() => navigation.navigate('EditProfile')}
             >
               <Ionicons name="create-outline" size={15} color={colors.textWhite} />
               <Text style={styles.actionBtnPrimaryText}>Edit Profile</Text>
@@ -217,25 +487,171 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
+        {/* ---------- 3D Avatar ---------- */}
+        <View style={styles.avatarBannerWrap} {...avatarPanResponder.panHandlers}>
+          {previewMode === 'preview' && activePreviewImageUrl && genState === GEN_STATE.IDLE ? (
+            <View style={[styles.avatarBanner, styles.avatarPreviewPanel]}>
+              <Image
+                source={{ uri: activePreviewImageUrl }}
+                style={styles.avatarPreviewHero}
+                onError={handlePreviewImageError}
+              />
+            </View>
+          ) : activeAvatarUrl && genState === GEN_STATE.IDLE ? (
+            <Avatar3DViewer
+              key={`${activeAvatarUrl}:${previewMode === 'animated' ? 'animated' : 'still'}`}
+              modelUrl={activeAvatarUrl}
+              rotation={modelRotation}
+              style={styles.avatarBanner}
+              onLoadError={handleAvatarLoadError}
+              playAnimation={previewMode === 'animated'}
+            />
+          ) : isGenerating ? (
+            <View style={[styles.avatarBanner, styles.avatarBannerCenter]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.avatarBannerText}>
+                {genState === GEN_STATE.UPLOADING
+                  ? 'Uploading photo…'
+                  : `${genLabel || 'Generating 3D avatar…'} ${genProgress}%`}
+              </Text>
+              <View style={styles.avatarProgressBar}>
+                <View style={[styles.avatarProgressFill, { width: `${genProgress}%` }]} />
+              </View>
+            </View>
+          ) : genState === GEN_STATE.ERROR ? (
+            <TouchableOpacity
+              style={[styles.avatarBanner, styles.avatarBannerCenter]}
+              onPress={pickAndGenerate}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="warning-outline" size={40} color={colors.error} />
+              <Text style={[styles.avatarBannerText, { color: colors.error }]}>Generation failed</Text>
+              <Text style={styles.avatarBannerSub}>{genError}</Text>
+              <Text style={[styles.avatarBannerSub, { color: colors.primary, marginTop: 6 }]}>Tap to retry</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.avatarBanner, styles.avatarBannerCenter]}
+              onPress={pickAndGenerate}
+              activeOpacity={0.75}
+            >
+              <View style={styles.avatarBannerIcon}>
+                <Ionicons name="person-outline" size={40} color={colors.textMuted} />
+              </View>
+              <Text style={styles.avatarBannerText}>Create 3D Avatar</Text>
+              <Text style={styles.avatarBannerSub}>Tap to upload a photo and generate your avatar</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={styles.avatarHint}>Drag the avatar or use the arrows to turn left and right.</Text>
+        {refreshingAvatarUrl ? (
+          <Text style={styles.avatarSubHint}>Refreshing avatar file…</Text>
+        ) : null}
+
+        {/* View mode controls */}
+        {availablePreviewSources.length > 0 && genState === GEN_STATE.IDLE && (
+          <View style={styles.avatarControls}>
+            <Text style={styles.motionLabel}>View mode</Text>
+            <View style={styles.animationPicker}>
+              {availablePreviewSources.map((source) => {
+                const selected = previewMode === source.key;
+                return (
+                  <TouchableOpacity
+                    key={source.key}
+                    style={[styles.animationChip, selected && styles.animationChipActive]}
+                    onPress={() => setPreviewMode(source.key)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.animationChipText, selected && styles.animationChipTextActive]}>
+                      {source.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {previewMode !== 'preview' && activeAvatarUrl ? (
+              <View style={styles.rotationButtons}>
+                <TouchableOpacity
+                  style={styles.rotateBtn}
+                  onPress={() => rotateByStep(-ROTATION_STEP)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
+                </TouchableOpacity>
+                <Text style={styles.rotateBtnHint}>{getRotationLabel(modelRotation)}°</Text>
+                <TouchableOpacity
+                  style={styles.rotateBtn}
+                  onPress={() => rotateByStep(ROTATION_STEP)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <Text style={styles.motionLabel}>Choose a motion</Text>
+            <View style={styles.animationPicker}>
+              {ANIMATION_OPTIONS.map((option) => {
+                const selected = selectedAnimation === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.animationChip, selected && styles.animationChipActive]}
+                    onPress={() => setSelectedAnimation(option.value)}
+                    disabled={animateState === 'running'}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.animationChipText, selected && styles.animationChipTextActive]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.avatarActionRow}>
+              <TouchableOpacity
+                style={[styles.avatarChangePill, animateState === 'running' && styles.avatarActionDisabled]}
+                onPress={handleAnimateAvatar}
+                disabled={animateState === 'running'}
+              >
+                <Ionicons name="walk-outline" size={15} color={colors.textSecondary} />
+                <Text style={styles.avatarChangePillText}>
+                  {animateState === 'running' ? (animateLabel || 'Adding motion...') : 'Add Motion'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.avatarChangePill} onPress={pickAndGenerate}>
+                <Ionicons name="camera-outline" size={15} color={colors.textSecondary} />
+                <Text style={styles.avatarChangePillText}>Change Avatar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* ---------- Stats strip ---------- */}
         <View style={styles.statsStrip}>
-          <View style={styles.statBox}>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.75}>
             <Text style={styles.statEmoji}>⭐</Text>
             <Text style={styles.statValue}>{computedRating.toFixed(1)}</Text>
             <Text style={styles.statLabel}>Rating</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('reviews')} activeOpacity={0.75}>
             <Text style={styles.statEmoji}>🧾</Text>
             <Text style={styles.statValue}>{reviews.length}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('Leaderboard')} activeOpacity={0.75}>
             <Text style={styles.statEmoji}>🏆</Text>
             <Text style={styles.statValue}>#{weeklyRank ?? '-'}</Text>
             <Text style={styles.statLabel}>This week</Text>
-          </View>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.statBox} onPress={() => goTab('friends')} activeOpacity={0.75}>
+            <Text style={styles.statEmoji}>🤝</Text>
+            <Text style={styles.statValue}>{friends.length}</Text>
+            <Text style={styles.statLabel}>Friends</Text>
+            <Ionicons name="chevron-forward" size={10} color={colors.textMuted} style={styles.statChevron} />
+          </TouchableOpacity>
         </View>
 
         {/* ---------- Level card ---------- */}
@@ -258,32 +674,30 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.levelTip}>
             <Text style={styles.levelTipText}>💡 {xpHint}</Text>
           </View>
-        </View>
-
-        {/* ---------- Quick Actions ---------- */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickGrid}>
-            {QUICK_ACTIONS.map(q => (
-              <TouchableOpacity key={q.id} style={styles.quickCard} onPress={q.onPress}>
-                <View style={[styles.quickIconWrap, { backgroundColor: q.color + '22' }]}>
-                  <Ionicons name={q.icon} size={20} color={q.color} />
-                </View>
-                <Text style={styles.quickLabel}>{q.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TouchableOpacity
+            style={styles.tasksBtn}
+            onPress={() => navigation.navigate('Tasks')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="flash-outline" size={14} color={colors.primaryDark} />
+            <Text style={styles.tasksBtnText}>View Daily & Weekly Tasks</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} />
+          </TouchableOpacity>
         </View>
 
         {/* ---------- Active Exchanges ---------- */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Exchanges</Text>
-            {activeExchanges.length > 0 && (
-              <TouchableOpacity onPress={() => Alert.alert('All exchanges', 'All-exchanges screen coming soon.')}>
-                <Text style={styles.viewAllLink}>View all</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={() => Alert.alert(
+                'Exchange History',
+                `You have completed ${completedExchanges.length} exchange${completedExchanges.length === 1 ? '' : 's'} so far.`
+              )}
+            >
+              <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           {activeExchanges.length === 0 ? (
@@ -318,31 +732,18 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         {/* ---------- Achievements ---------- */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Achievements</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {[
-              ...unlockedKeys.map(k => ACHIEVEMENT_DEFS.find(d => d.key === k)).filter(Boolean),
-              ...ACHIEVEMENT_DEFS.filter(d => !unlockedKeys.includes(d.key)),
-            ].map(a => {
-              const unlocked = unlockedKeys.includes(a.key);
-              return (
-                <View
-                  key={a.key}
-                  style={[styles.achieveCard, !unlocked && styles.achieveCardLocked]}
-                >
-                  <Text style={[styles.achieveEmoji, !unlocked && { opacity: 0.4 }]}>
-                    {unlocked ? a.emoji : '🔒'}
-                  </Text>
-                  <Text style={[styles.achieveLabel, !unlocked && styles.achieveLabelLocked]}>
-                    {a.label}
-                  </Text>
-                  <Text style={styles.achieveDesc}>{a.desc}</Text>
+        {unlockedKeys.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Achievements</Text>
+            <View style={styles.achieveTagRow}>
+              {ACHIEVEMENT_DEFS.filter(a => unlockedKeys.includes(a.key)).map(a => (
+                <View key={a.key} style={styles.achieveTag}>
+                  <Text style={styles.achieveTagText}>{a.emoji} #{a.label}</Text>
                 </View>
-              );
-            })}
-          </ScrollView>
-        </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* ---------- Tabs ---------- */}
         <View
@@ -408,7 +809,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.emptySub}>Tap + REQUEST HELP on the map to post one.</Text>
             </View>
           ) : myNeeds.map(item => (
-            <View key={item.id} style={styles.historyCard}>
+            <TouchableOpacity key={item.id} style={styles.historyCard} activeOpacity={0.88} onPress={() => openOwnPostDetail(item)}>
               <View style={[styles.historyDot, { backgroundColor: colors.need }]} />
               <View style={styles.historyBody}>
                 <Text style={styles.historyTitle}>{item.title}</Text>
@@ -420,7 +821,7 @@ export default function ProfileScreen({ navigation }) {
               <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                 <Ionicons name="trash-outline" size={16} color={colors.error} />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -432,7 +833,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.emptySub}>Tap + REQUEST HELP on the map to offer something.</Text>
             </View>
           ) : mySupplies.map(item => (
-            <View key={item.id} style={styles.historyCard}>
+            <TouchableOpacity key={item.id} style={styles.historyCard} activeOpacity={0.88} onPress={() => openOwnPostDetail(item)}>
               <View style={[styles.historyDot, { backgroundColor: colors.supply }]} />
               <View style={styles.historyBody}>
                 <Text style={styles.historyTitle}>{item.title}</Text>
@@ -444,7 +845,7 @@ export default function ProfileScreen({ navigation }) {
               <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                 <Ionicons name="trash-outline" size={16} color={colors.error} />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -555,19 +956,136 @@ const styles = StyleSheet.create({
   },
   actionBtnGhostText: { ...typography.smallBold, color: colors.primary },
 
-  /* Stats strip */
-  statsStrip: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.card,
+  /* Avatar banner */
+  avatarBannerWrap: {
     marginHorizontal: 16, marginTop: 14,
-    borderRadius: 18, paddingVertical: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+    aspectRatio: 1,
+    position: 'relative',
   },
-  statBox: { flex: 1, alignItems: 'center', gap: 2 },
-  statEmoji: { fontSize: 18 },
-  statValue: { ...typography.h4, color: colors.textPrimary },
-  statLabel: { ...typography.caption, color: colors.textMuted },
+  avatarBanner: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1.5, borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  avatarPreviewPanel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  avatarPreviewHero: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  avatarBannerCenter: {
+    alignItems: 'center', justifyContent: 'center', gap: 10,
+    borderStyle: 'dashed',
+  },
+  avatarControls: {
+    marginHorizontal: 16, marginTop: 8, gap: 8,
+  },
+  avatarHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 8,
+    marginHorizontal: 24,
+  },
+  avatarSubHint: {
+    ...typography.caption,
+    color: colors.primary,
+    textAlign: 'center',
+    marginTop: 4,
+    marginHorizontal: 24,
+  },
+  avatarActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  avatarChangePill: {
+    flex: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.card,
+    borderWidth: 1, borderColor: colors.border,
+    paddingVertical: 9, borderRadius: 12,
+  },
+  avatarActionDisabled: { opacity: 0.7 },
+  avatarChangePillText: { ...typography.small, color: colors.textSecondary, fontWeight: '600' },
+  avatarBannerIcon: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: colors.background,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarBannerText: { ...typography.body, color: colors.textSecondary, fontWeight: '600' },
+  avatarBannerSub: { ...typography.small, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 24 },
+  avatarProgressBar: {
+    width: '60%', height: 6,
+    backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden',
+  },
+  avatarProgressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 3 },
+  rotationButtons: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24,
+  },
+  rotateBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.card,
+    borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rotateBtnHint: { ...typography.small, color: colors.textMuted },
+  motionLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  animationPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  animationChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  animationChipActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
+  animationChipText: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  animationChipTextActive: {
+    color: colors.primary,
+  },
+
+  /* Stats strip */
+
+  statsStrip: {
+    flexDirection: 'row',
+    marginHorizontal: 16, marginTop: 14,
+    gap: 8,
+  },
+  statBox: {
+    flex: 1, alignItems: 'center', gap: 3,
+    backgroundColor: colors.card,
+    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 4,
+    borderWidth: 1, borderColor: colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
+  },
+  statEmoji:   { fontSize: 18 },
+  statValue:   { ...typography.h4, color: colors.textPrimary },
+  statLabel:   { ...typography.caption, color: colors.textMuted },
+  statChevron: { marginTop: 2 },
   statDivider: { width: 1, height: 36, backgroundColor: colors.border },
 
   /* Level card */
@@ -590,6 +1108,12 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 4 },
   levelTip: { backgroundColor: colors.primaryLight, borderRadius: 10, padding: 10 },
   levelTipText: { ...typography.small, color: colors.primary },
+  tasksBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 4, paddingVertical: 10, borderRadius: 10,
+    backgroundColor: colors.primaryLight,
+  },
+  tasksBtnText: { ...typography.small, color: colors.primaryDark, fontWeight: '600' },
 
   /* Sections */
   section: { paddingHorizontal: 16, marginTop: 18 },
@@ -599,6 +1123,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: 10 },
   viewAllLink: { ...typography.smallBold, color: colors.primary, marginBottom: 10 },
+  historyBtn: { padding: 4 },
 
   /* Quick actions */
   quickGrid: { flexDirection: 'row', gap: 10 },
@@ -637,23 +1162,14 @@ const styles = StyleSheet.create({
   emptyMiniText: { ...typography.small, color: colors.textMuted },
 
   /* Achievements */
-  achieveCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16, padding: 14,
-    marginRight: 10, alignItems: 'center',
-    width: 110, gap: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  achieveTagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  achieveTag: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  achieveCardLocked: {
-    backgroundColor: colors.background,
-    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
-    shadowOpacity: 0,
-  },
-  achieveEmoji: { fontSize: 28 },
-  achieveLabel: { ...typography.smallBold, color: colors.textPrimary, textAlign: 'center' },
-  achieveLabelLocked: { color: colors.textMuted },
-  achieveDesc: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
+  achieveTagText: { ...typography.small, color: colors.primaryDark, fontWeight: '600' },
 
   /* Tabs */
   tabBar: {

@@ -509,7 +509,15 @@ export default function MapScreen({ navigation }) {
                           setTooltip(null);
                           const existingChat = chats.find(c => c.user?.id === tooltip.poster.id);
                           navigation.navigate('ChatDetail', {
-                            chat: existingChat ?? { user: tooltip.poster, postTitle: tooltip.title },
+                            chat: {
+                              ...(existingChat ?? {}),
+                              user: tooltip.poster,
+                              postId: tooltip.id,
+                              postType: tooltip.type,
+                              postOwnerId: tooltip.poster.id,
+                              postCategory: tooltip.category,
+                              postTitle: tooltip.title,
+                            },
                           });
                         }}
                       >

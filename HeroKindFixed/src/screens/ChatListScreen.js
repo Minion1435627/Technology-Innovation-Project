@@ -133,7 +133,30 @@ function getChatPriority(chat) {
 export default function ChatListScreen({ navigation }) {
   const { chats } = useChats();
   const enhancedChats = useMemo(() => {
-    return [...chats]
+    const getChatDedupeKey = (chat) => {
+      const userId = chat.user?.id ? String(chat.user.id) : '';
+      const userName = chat.user?.name ? String(chat.user.name).trim().toLowerCase() : '';
+      return userId || userName || chat.id;
+    };
+
+    const byUser = new Map();
+    chats.forEach(chat => {
+      const key = getChatDedupeKey(chat);
+      if (!key) return;
+      const existing = byUser.get(key);
+      if (!existing) {
+        byUser.set(key, chat);
+        return;
+      }
+
+      const existingTime = existing.rawLastMessageAt ? new Date(existing.rawLastMessageAt).getTime() : 0;
+      const nextTime = chat.rawLastMessageAt ? new Date(chat.rawLastMessageAt).getTime() : 0;
+      if (nextTime >= existingTime) {
+        byUser.set(key, chat);
+      }
+    });
+
+    return [...byUser.values()]
       .map(chat => ({
         ...chat,
         exchange: chat.exchange ?? EXCHANGE_META[chat.id] ?? null,
@@ -141,8 +164,9 @@ export default function ChatListScreen({ navigation }) {
       }))
       .sort((a, b) => {
         if (a.priority !== b.priority) return a.priority - b.priority;
-        if ((b.unread ?? 0) !== (a.unread ?? 0)) return (b.unread ?? 0) - (a.unread ?? 0);
-        return a.user.name.localeCompare(b.user.name);
+        const aTime = a.rawLastMessageAt ? new Date(a.rawLastMessageAt).getTime() : 0;
+        const bTime = b.rawLastMessageAt ? new Date(b.rawLastMessageAt).getTime() : 0;
+        return bTime - aTime;
       });
   }, [chats]);
 

@@ -4,7 +4,7 @@ Meeting for 21_04
 3. Assign the task for the presentation
 4. Discuss next step
 
-Introduction
+Introduction (Bella)
 Introduce your team and role/responsibilities (R&R)
 Briefly introduce the topic you are investigating. What is the problem and why is it important? 
 What were your initial expectations about the problem?
@@ -12,7 +12,7 @@ What innovation did you initially think was needed to address this problem?
 
 
 
-Your investigation
+Your investigation (Tammy)
 Provide an overview of the investigation methods you have used so far. 
 How many interviews have you conducted? Who have you interviewed?
 How have you analysed the data (e.g., coding, affinity mapping, thematic analysis)?
@@ -22,13 +22,13 @@ Needs analysis: What needs have you identified so far? Summarise your key needs 
 
 
 
-Findings
+Findings (Bella)
 Provide a summary of the key findings to date, including any highlights from interviews conducted with end users/stakeholders. 
 Clearly connect your findings to the needs you identified (i.e., evidence → need → insight).
 
 
 
-Personas
+Personas (Leo)
 What have you learned about your intended users from your investigation?
 Present 2 or 3 personas to bring your intended users and/or stakeholders to life. Include their goals and concerns.  
 Make sure each persona is linked to specific user needs (and evidence).
@@ -36,15 +36,88 @@ Make sure each persona is linked to specific user needs (and evidence).
 -> Personas and Scenarios (Worshop 6)
 
 
-Value Proposition & Innovation Hypothesis 
+Value Proposition & Innovation Hypothesis  (Anita)
 Present your current Value Proposition, clearly stating who it is for (target persona/customer segment) and the key Customer Jobs, Pains, and Gains you aim to address.
 Where relevant, include a brief snapshot of your Value Proposition Canvas (Customer Profile → Value Map).
 Present 1–2 key Innovation Hypotheses as testable statements that link your identified Jobs/Pains/Gains to your proposed value, and outline how you will validate them in the next stage.
 
 -> Create Innovation Hypotheses (Workshop 5)
 
-Next steps
+Next steps (Anita)
 Provide an outline of plans for the next stage of your project, including: 
 What are the requirements you have identified so far for your design ideas (i.e., what will your product need to do and/or how will it need to behave)?
-What are the key performance indicators you will use to evaluate your design ideas? 
+
+Requirements identified for our design idea so far:
+  - The app must show nearby posts within a user-defined radius distance in real time:
+    •	The users can see the posts posted by their neighbour
+    •	Furthermore, the user denfinitely can post any request or suppply as they want. 
+    •	The post will be displayed as a pin on the map. This allow other to see where and what is your needs.
+
+  - All users must verify their identity before posting or responding to requests. 
+    •	Verification options include a student email address or a mobile phone number via SMS.
+    •	When we did this part, we face some problem, since we have no access for the SSO system, which can verify the student account. 
+    •	And we don't want to pay for the text to verify the phone number     
+
+  - Every exchange must have a clear lifecycle:
+    •	Stages: Lifecycle stages: request start-> pending -> once accept, the exchange start → after the item or task complete, it can mark as Completed (or Disputed if something wrong happen in the exchange).
+    •	Dual Confirmation: Both parties receive a push notification prompting them to confirm acception or completion .
+    •	Abuse Prevention: Requesters who repeatedly fail to confirm or close exchanges may face account restrictions. The system will lock their account
+                                  
+  - Users must be able to control who contacts them (privacy/safety):
+    •	For the saftety issue, we allow user to defined who can contact them. 
+        -> for example, only freind's can contact them. Otherwise, other users can not disturb them. 
+    •	Going to more details, our freind system is a one way system, like u mark the person as your freind. It will be your freind directly without thier acception.
+        -> so, this give u the access to control who can contact you. 
+    •	However, we still hope the users to receive any message from other users not only freind, since our aim of this app is to create a kind and helpful neighbourhood.
+    •	Blocking: Users can block specific accounts. Blocked users cannot view the blocker's profile, posts, or send messages.
+    •	Reporting: For misconduct behavior
+
+  - The app must work on both iOS and Android system:
+    •	since our users might use both iOS or Android system, so we need to make sure all function in the app works on both system
+
+  - To fix cold start issue and make our app more attractive:
+    •	The users can input the image which represent theirselves when they registed, and we can make the avatar for them
+    •	Once the users finish the daily task or weekly task to help or exchange task in our system, they will get the score. 
+    •	The user with the top three highest score, their avatar will stand on the podium. 
+    •	We also design the two small games in the app, the high level users has more chance to get reward in the mini-game.
+
+
+      
+What are the key performance indicators (KPI) you will use to evaluate your design ideas? 
+
+The following will we use to evaluate our design idea.                                                                 
+  1. Task completion rate
+    •	The percentage of help requests posted that result in a successfully closed exchanges.
+    •	This is the single most indicator to see our the platform is delivering real value. 
+    •	A high posting rate with a low completion rate indicates a mismatch between supply and demand or trust barriers.
+
+  2. Time-to-first-response
+    •	how quickly a requester receives a chat message after posting 
+    •	If requesters wait hours for a response, the platform loses its real-time, peer-to-peer feel.
+
+  3. Supplier return rate
+    •	The percentage of users who complete a second supply exchange within next few weeks
+    •	This metric tells us whether the experience of giving other help in our system is rewarding enough to bring the users back.
+
+  4.  Score and review from users:
+    •	The score show how the users engage in the app daily and weekly
+    •	The review and rating from one user to another users also reflect how it work for the idea in the app.
+
+  5. Feedback system:
+    •   We also have the feedback system which allow users to give us some feedback to refine our app
+
+	
+
 If you have encountered significant risks, requiring critical changes to the original plan, explain the risks, the management process, and details of the modifications made.
+Risks & Changes Made                                                                                
+  1.  Safety & Uncertainty in Real-world Exchange Tasks
+    •    Even with reminders and consent forms, we could not fully control or predict what might happen during real-life help/exchange interactions between users.
+    •    If it has an emergency problem, ask for the professional help first. 
+    •    Added clearer guidelines and boundaries for interactions and exchange
+
+  2.  User Verification Constraints
+    •   Our original plan required verification using student accounts + phone numbers, but:
+    •   when we try to implemnet in the app, we have No access to university authentication systems
+    •   And SMS verification requires cost and external services
+    •   To management: we may more rely on log in system, and link to google account to double check the user email.
+The above changes allowed us to reduce risk while still achieving our core project goals.

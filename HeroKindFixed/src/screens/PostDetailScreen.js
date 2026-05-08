@@ -6,13 +6,20 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { useChats } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
+import { usePosts } from '../context/PostsContext';
 
 export default function PostDetailScreen({ navigation, route }) {
   const post = route?.params?.post;
+  const { chats } = useChats();
+  const { user } = useAuth();
+  const { removePost } = usePosts();
 
   if (!post) {
     return (
@@ -26,6 +33,48 @@ export default function PostDetailScreen({ navigation, route }) {
       </SafeAreaView>
     );
   }
+
+  const isOwnPost = Boolean(user?.id && post.ownerId === user.id);
+  const existingChat = chats.find(c => c.user?.id === post.ownerId);
+
+  const replyToPost = () => {
+    if (!post.ownerId || isOwnPost) return;
+    navigation.push('ChatDetail', {
+      chat: {
+        ...(existingChat ?? {}),
+        user: {
+          id: post.ownerId,
+          name: post.ownerName,
+          stars: post.ownerStars ?? 0,
+          gender: post.ownerGender,
+        },
+        postId: post.id ?? null,
+        postType: post.type ?? null,
+        postOwnerId: post.ownerId,
+        postCategory: post.category ?? null,
+        postTitle: post.title ?? 'Post',
+      },
+    });
+  };
+
+  const deleteOwnPost = () => {
+    if (!post.id) return;
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to remove this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            removePost(post.id);
+            navigation.goBack();
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -74,12 +123,32 @@ export default function PostDetailScreen({ navigation, route }) {
           <Text style={styles.infoValue}>{post.exchangeSummary}</Text>
         </View>
 
+        {!isOwnPost && (
+          <TouchableOpacity
+            style={styles.chatBtn}
+            onPress={replyToPost}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.textWhite} />
+            <Text style={styles.chatBtnText}>Reply</Text>
+          </TouchableOpacity>
+        )}
+
+        {isOwnPost && (
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={deleteOwnPost}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.textWhite} />
+            <Text style={styles.chatBtnText}>Delete Post</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
-          style={styles.chatBtn}
+          style={styles.backGhostBtn}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.textWhite} />
-          <Text style={styles.chatBtnText}>Back to Chat</Text>
+          <Ionicons name="arrow-back-outline" size={18} color={colors.primary} />
+          <Text style={styles.backGhostBtnText}>Back</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -197,6 +266,32 @@ const styles = StyleSheet.create({
   chatBtnText: {
     ...typography.button,
     color: colors.textWhite,
+  },
+  deleteBtn: {
+    marginTop: 6,
+    backgroundColor: colors.error,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  backGhostBtn: {
+    marginTop: 6,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.card,
+  },
+  backGhostBtnText: {
+    ...typography.button,
+    color: colors.primary,
   },
   emptyState: {
     flex: 1,
