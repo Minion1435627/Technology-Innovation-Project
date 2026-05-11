@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import Avatar from '../components/Avatar';
-import { fetchLeaderboard } from '../lib/db';
+import LeaderboardAvatar3D from '../components/LeaderboardAvatar3D';
+import { fetchLeaderboard, getAvatarPublicUrl } from '../lib/db';
 import { useAuth } from '../context/AuthContext';
 
 const PODIUM_COLORS = ['#FED330', '#BDC3C7', '#E67E22']; // Gold, Silver, Bronze
@@ -68,7 +69,7 @@ export default function LeaderboardScreen({ navigation }) {
                   {/* Avatar + name above platform */}
                   <View style={styles.podiumAvatarSection}>
                     <Text style={styles.podiumEmoji}>{PODIUM_EMOJIS[idx]}</Text>
-                    <Avatar name={user.name} size={idx === 0 ? 64 : 52} level={user.computedLevel} />
+                    <PodiumAvatar user={user} size={idx === 0 ? 64 : 52} />
                     <Text style={styles.podiumName}>{user.name}</Text>
                     <View style={styles.podiumScoreBadge}>
                       <Text style={styles.podiumScore}>{user.score} pts</Text>
@@ -132,6 +133,41 @@ export default function LeaderboardScreen({ navigation }) {
 
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function PodiumAvatar({ user, size }) {
+  const [modelState, setModelState] = React.useState('pending'); // 'pending' | 'ready' | 'failed'
+
+  // Require a non-empty http URL; anything else (null, empty string, storage miss) uses Avatar.
+  const rawUrl = getAvatarPublicUrl(user.avatar_storage_path) || user.avatar_url || null;
+  const modelUrl = typeof rawUrl === 'string' && rawUrl.startsWith('http') ? rawUrl : null;
+
+  // No URL or confirmed load failure → show initials, no GL canvas mounted.
+  if (!modelUrl || modelState === 'failed') {
+    return <Avatar name={user.name} size={size} level={user.computedLevel} />;
+  }
+
+  // GL canvas renders first (behind).
+  // Avatar overlay is rendered AFTER (on top in z-order) while loading.
+  // This avoids relying on opacity: 0 to hide the GL layer, which expo-gl can ignore on iOS.
+  return (
+    <View style={{ width: size, height: size }}>
+      <LeaderboardAvatar3D
+        modelUrl={modelUrl}
+        size={size}
+        onReady={() => setModelState('ready')}
+        onLoadError={() => setModelState('failed')}
+      />
+      {modelState !== 'ready' && (
+        <View
+          style={[StyleSheet.absoluteFill, { borderRadius: size / 2, overflow: 'hidden' }]}
+          pointerEvents="none"
+        >
+          <Avatar name={user.name} size={size} level={user.computedLevel} />
+        </View>
+      )}
+    </View>
   );
 }
 

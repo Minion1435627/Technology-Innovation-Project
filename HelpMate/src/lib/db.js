@@ -446,7 +446,7 @@ export async function createNotification({
 export async function fetchLeaderboard() {
   const { data, error } = await supabase
     .from('users')
-    .select('id, name, level, xp, stars, weekly_score, neighbourhood')
+    .select('id, name, level, xp, stars, weekly_score, neighbourhood, avatar_url, avatar_storage_path')
     .order('weekly_score', { ascending: false })
     .limit(20);
   if (error) console.warn('fetchLeaderboard:', error.message);
