@@ -2,6 +2,16 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { fetchUserProfile, updateUserProfile } from '../lib/db';
 
+const XP_LEVELS = [
+  { level: 1, xp: 0 },
+  { level: 2, xp: 100 },
+  { level: 3, xp: 200 },
+  { level: 4, xp: 500 },
+  { level: 5, xp: 1000 },
+];
+const getLevelFromXp = (xp) =>
+  XP_LEVELS.reduce((lvl, rule) => (xp ?? 0) >= rule.xp ? rule.level : lvl, 1);
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -34,8 +44,12 @@ export function AuthProvider({ children }) {
 
   const patchProfile = async (fields) => {
     if (!user?.id) return;
-    setProfile(prev => prev ? { ...prev, ...fields } : prev);
-    await updateUserProfile(user.id, fields);
+    const updatedFields = { ...fields };
+    if ('xp' in fields) {
+      updatedFields.level = getLevelFromXp(fields.xp);
+    }
+    setProfile(prev => prev ? { ...prev, ...updatedFields } : prev);
+    await updateUserProfile(user.id, updatedFields);
   };
 
   const signOut = async () => {

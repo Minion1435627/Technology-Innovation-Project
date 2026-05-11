@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
@@ -99,6 +100,14 @@ export default function PostDetailScreen({ navigation, route }) {
 
           <Text style={styles.title}>{post.title}</Text>
           <Text style={styles.description}>{post.description}</Text>
+
+          {post.photos?.length > 0 && (
+            <View style={styles.photoRow}>
+              {post.photos.map((uri, i) => (
+                <Image key={i} source={{ uri }} style={styles.photoThumb} />
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.infoCard}>
@@ -230,6 +239,18 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     lineHeight: 24,
+  },
+  photoRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  photoThumb: {
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    backgroundColor: colors.border,
   },
   infoCard: {
     backgroundColor: colors.card,

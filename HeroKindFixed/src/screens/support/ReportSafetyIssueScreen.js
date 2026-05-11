@@ -226,9 +226,9 @@ const styles = StyleSheet.create({
   issueLabelSelected: { color: colors.primaryDark, fontWeight: '600' },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   inputCard: { paddingHorizontal: 14, paddingVertical: 4 },
-  singleInput: { ...typography.body, color: colors.textPrimary, minHeight: 44 },
+  singleInput: { ...typography.body, lineHeight: undefined, color: colors.textPrimary, minHeight: 44 },
   textAreaCard: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
-  textArea: { ...typography.body, color: colors.textPrimary, minHeight: 130 },
+  textArea: { ...typography.body, lineHeight: undefined, color: colors.textPrimary, minHeight: 130 },
   charCount: { ...typography.caption, color: colors.textMuted, textAlign: 'right', paddingTop: 4 },
   notice: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,

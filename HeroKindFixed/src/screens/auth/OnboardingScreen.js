@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { generateAvatarFromImage } from '../../services/tripoApi';
@@ -20,21 +21,134 @@ const GREEN_LIGHT = '#E4EFD8';
 
 const SLIDES = [
   {
-    emoji: '🗺️',
+    color: '#C8DFC0',
     title: 'See who needs help nearby',
     body: 'Your neighbourhood map shows real-time requests and offers within walking distance.',
   },
   {
-    emoji: '🤝',
+    color: '#C4D9E0',
     title: 'Ask, offer, and connect',
     body: 'Post a need or share what you have. Chat with neighbours in seconds.',
   },
   {
-    emoji: '🏆',
+    color: '#DDD4C0',
     title: 'Earn rewards for helping',
     body: 'Build your reputation, level up your avatar, and climb the weekly leaderboard.',
   },
 ];
+
+function SlideIllustration({ index }) {
+  if (index === 0) {
+    return (
+      <View style={ill.scene}>
+        <View style={ill.radiusRing} />
+        <View style={ill.centerPin}>
+          <View style={ill.centerPinInner} />
+        </View>
+        <View style={[ill.neighborPin, { position: 'absolute', top: '14%', left: '14%' }]} />
+        <View style={[ill.neighborPin, { position: 'absolute', top: '18%', right: '16%' }]} />
+        <View style={[ill.neighborPin, { position: 'absolute', bottom: '16%', left: '28%' }]} />
+        <View style={[ill.neighborPin, { position: 'absolute', bottom: '20%', right: '14%' }]} />
+      </View>
+    );
+  }
+
+  if (index === 1) {
+    return (
+      <View style={ill.scene}>
+        <View style={ill.chatLeft}>
+          <View style={ill.chatLineW} />
+          <View style={[ill.chatLineW, { width: '55%' }]} />
+        </View>
+        <View style={ill.chatRight}>
+          <View style={ill.chatLineD} />
+          <View style={[ill.chatLineD, { width: '60%' }]} />
+        </View>
+        <View style={[ill.chatLeft, { marginTop: -4 }]}>
+          <View style={[ill.chatLineW, { width: '45%' }]} />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={ill.scene}>
+      <View style={ill.medal}>
+        <Text style={ill.medalStar}>★</Text>
+      </View>
+      <View style={ill.xpBarBg}>
+        <View style={ill.xpBarFill} />
+      </View>
+      <View style={ill.xpRow}>
+        <Text style={ill.xpLabel}>Lv 3</Text>
+        <Text style={ill.xpLabel}>+50 XP</Text>
+        <Text style={ill.xpLabel}>Lv 4</Text>
+      </View>
+    </View>
+  );
+}
+
+const ill = StyleSheet.create({
+  scene: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  radiusRing: {
+    position: 'absolute',
+    width: 130, height: 130, borderRadius: 65,
+    borderWidth: 1.5, borderColor: 'rgba(65,80,60,0.25)',
+    borderStyle: 'dashed',
+  },
+  centerPin: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: '#41503C',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18, shadowRadius: 6, elevation: 4,
+  },
+  centerPinInner: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' },
+  neighborPin: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#86A778',
+    borderWidth: 3, borderColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 4, elevation: 3,
+  },
+
+  chatLeft: {
+    alignSelf: 'flex-start', marginLeft: 20,
+    backgroundColor: '#41503C',
+    borderRadius: 16, borderBottomLeftRadius: 4,
+    paddingHorizontal: 14, paddingVertical: 10,
+    gap: 6, marginVertical: 4, maxWidth: '62%',
+  },
+  chatRight: {
+    alignSelf: 'flex-end', marginRight: 20,
+    backgroundColor: '#fff',
+    borderRadius: 16, borderBottomRightRadius: 4,
+    paddingHorizontal: 14, paddingVertical: 10,
+    gap: 6, marginVertical: 4, maxWidth: '62%',
+    borderWidth: 1.5, borderColor: 'rgba(65,80,60,0.15)',
+  },
+  chatLineW: { height: 3, width: '80%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.65)' },
+  chatLineD: { height: 3, width: '80%', borderRadius: 2, backgroundColor: 'rgba(65,80,60,0.25)' },
+
+  medal: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: '#41503C',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
+    marginBottom: 16,
+  },
+  medalStar: { fontSize: 34, color: '#F5C518' },
+  xpBarBg: {
+    width: '68%', height: 10, borderRadius: 5,
+    backgroundColor: 'rgba(65,80,60,0.15)',
+    marginBottom: 6,
+  },
+  xpBarFill: { width: '72%', height: '100%', borderRadius: 5, backgroundColor: '#41503C' },
+  xpRow: { flexDirection: 'row', justifyContent: 'space-between', width: '68%' },
+  xpLabel: { fontSize: 11, color: '#41503C', fontWeight: '600' },
+});
 
 // Generation states
 const STATE = {
@@ -176,7 +290,9 @@ export default function OnboardingScreen({ navigation }) {
               style={styles.avatarPreviewImage}
             />
           ) : (
-            <Text style={styles.uploadIcon}>✅</Text>
+            <View style={styles.uploadIconWrap}>
+              <Ionicons name="checkmark-circle" size={44} color={GREEN} />
+            </View>
           )}
           <Text style={styles.avatarPreviewText}>3D avatar ready!</Text>
         </>
@@ -185,7 +301,9 @@ export default function OnboardingScreen({ navigation }) {
     if (genState === STATE.ERROR) {
       return (
         <>
-          <Text style={styles.uploadIcon}>⚠️</Text>
+          <View style={styles.uploadIconWrap}>
+            <Ionicons name="warning-outline" size={44} color="#C0392B" />
+          </View>
           <Text style={[styles.avatarPreviewText, { color: '#C0392B' }]}>Generation failed</Text>
           <Text style={[styles.uploadSub, { color: '#C0392B', textAlign: 'center', paddingHorizontal: 12 }]}>
             {errorMsg}
@@ -215,7 +333,9 @@ export default function OnboardingScreen({ navigation }) {
     }
     return (
       <>
-        <Text style={styles.uploadIcon}>📷</Text>
+        <View style={styles.uploadIconWrap}>
+          <Ionicons name="camera-outline" size={44} color={colors.textMuted} />
+        </View>
         <Text style={styles.uploadText}>Tap to upload a photo</Text>
         <Text style={styles.uploadSub}>Selfie, illustration, pet photo — anything works</Text>
       </>
@@ -239,9 +359,13 @@ export default function OnboardingScreen({ navigation }) {
 
             {/* Slide content */}
             <View style={styles.slideCard}>
-              <Text style={styles.slideEmoji}>{SLIDES[slide].emoji}</Text>
-              <Text style={styles.slideTitle}>{SLIDES[slide].title}</Text>
-              <Text style={styles.slideBody}>{SLIDES[slide].body}</Text>
+              <View style={[styles.slideIllustrationArea, { backgroundColor: SLIDES[slide].color }]}>
+                <SlideIllustration index={slide} />
+              </View>
+              <View style={styles.slideTextArea}>
+                <Text style={styles.slideTitle}>{SLIDES[slide].title}</Text>
+                <Text style={styles.slideBody}>{SLIDES[slide].body}</Text>
+              </View>
             </View>
 
             <TouchableOpacity style={styles.primaryBtn} onPress={() => setSlide(s => s + 1)}>
@@ -290,17 +414,23 @@ export default function OnboardingScreen({ navigation }) {
 
             {/* Preview avatars */}
             <View style={styles.examplesRow}>
-              {['🧑', '👩', '🧙', '🐱', '🎭'].map((emoji, i) => (
+              {[
+                { icon: 'person', color: '#86A778' },
+                { icon: 'person', color: '#7AA8B4' },
+                { icon: 'person', color: '#B48A78' },
+                { icon: 'person', color: '#9878B4' },
+                { icon: 'person', color: '#B4A878' },
+              ].map((item, i) => (
                 <TouchableOpacity
                   key={i}
-                  style={styles.exampleAvatar}
+                  style={[styles.exampleAvatar, { backgroundColor: item.color + '22', borderColor: item.color + '55' }]}
                   onPress={pickImage}
                 >
-                  <Text style={styles.exampleEmoji}>{emoji}</Text>
+                  <Ionicons name={item.icon} size={26} color={item.color} />
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.examplesLabel}>Or pick a quick example above</Text>
+            <Text style={styles.examplesLabel}>Tap any to upload your photo</Text>
 
             <View style={styles.guidelinesBox}>
               <Text style={styles.guidelinesTitle}>Community guidelines</Text>
@@ -314,7 +444,7 @@ export default function OnboardingScreen({ navigation }) {
                 style={styles.agreeBtn}
                 onPress={() => navigation.replace('Main')}
               >
-                <Text style={styles.agreeBtnText}>I agree — Let me in! 🎉</Text>
+                <Text style={styles.agreeBtnText}>I agree — Let me in</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -342,18 +472,24 @@ const styles = StyleSheet.create({
   slideCard: {
     backgroundColor: colors.card,
     borderRadius: 28,
-    padding: 32,
-    alignItems: 'center',
     marginBottom: 32,
     width: '100%',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 4,
   },
-  slideEmoji: { fontSize: 72, marginBottom: 24 },
-  slideTitle: { ...typography.h2, color: colors.textPrimary, textAlign: 'center', marginBottom: 12 },
+  slideIllustrationArea: {
+    width: '100%',
+    height: 180,
+  },
+  slideTextArea: {
+    padding: 28,
+    alignItems: 'center',
+  },
+  slideTitle: { ...typography.h2, color: colors.textPrimary, textAlign: 'center', marginBottom: 10 },
   slideBody: { ...typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 24 },
 
   primaryBtn: {
@@ -396,7 +532,12 @@ const styles = StyleSheet.create({
     borderColor: GREEN,
     backgroundColor: GREEN_LIGHT,
   },
-  uploadIcon: { fontSize: 40 },
+  uploadIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: colors.background,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+  },
   uploadText: { ...typography.bodyBold, color: colors.textPrimary },
   uploadSub: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
   avatarPreviewImage: { width: 100, height: 100, borderRadius: 12 },
@@ -410,18 +551,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  examplesRow: { flexDirection: 'row', gap: 12, marginBottom: 8 },
+  examplesRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   exampleAvatar: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.border,
+    borderWidth: 1.5,
   },
-  exampleEmoji: { fontSize: 28 },
   examplesLabel: { ...typography.caption, color: colors.textMuted, marginBottom: 24 },
 
   guidelinesBox: {

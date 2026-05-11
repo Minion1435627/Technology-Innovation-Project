@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   inputIcon: { marginRight: 8 },
-  input: { flex: 1, ...typography.body, color: '#2C3E2D', padding: 0 },
+  input: { flex: 1, ...typography.body, lineHeight: undefined, color: '#2C3E2D', padding: 0 },
   eyeBtn: { padding: 4 },
 
   forgotBtn: { alignSelf: 'flex-end', marginBottom: 20, marginTop: -4 },

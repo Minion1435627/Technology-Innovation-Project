@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  TextInput, Modal, ScrollView, Dimensions, ActivityIndicator,
+  TextInput, Modal, ScrollView, Dimensions, ActivityIndicator, Image,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -449,6 +449,15 @@ export default function MapScreen({ navigation }) {
                 <Text style={styles.tooltipDescription}>{tooltip.description}</Text>
               )}
 
+              {/* Photos */}
+              {tooltip.photos?.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tooltipPhotoScroll}>
+                  {tooltip.photos.map((uri, i) => (
+                    <Image key={i} source={{ uri }} style={styles.tooltipPhoto} />
+                  ))}
+                </ScrollView>
+              )}
+
               {/* Availability */}
               {tooltip.availability && (
                 <View style={styles.availabilityRow}>
@@ -670,7 +679,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  searchInput: { flex: 1, ...typography.body, color: colors.textPrimary },
+  searchInput: { flex: 1, ...typography.body, lineHeight: undefined, color: colors.textPrimary },
   filterBtn: {
     width: 46, height: 46,
     backgroundColor: '#fff',
@@ -884,6 +893,13 @@ const styles = StyleSheet.create({
   tooltipMetaItem: { ...typography.small, color: colors.textSecondary },
   tooltipMetaDot: { ...typography.small, color: colors.textMuted },
   tooltipDescription: { ...typography.body, color: colors.textSecondary, lineHeight: 20 },
+  tooltipPhotoScroll: { marginTop: 8 },
+  tooltipPhoto: {
+    width: 120, height: 90,
+    borderRadius: 10,
+    marginRight: 8,
+    backgroundColor: colors.border,
+  },
   availabilityRow: {
     backgroundColor: colors.primaryLight, borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 5, alignSelf: 'flex-start',

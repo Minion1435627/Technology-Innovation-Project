@@ -96,7 +96,7 @@ export async function updateUserProfile(userId, fields) {
 export async function fetchNearbyPosts() {
   const { data, error } = await supabase
     .from('posts')
-    .select(`*, users(id, name, stars, level, verified, gender)`)
+    .select(`*, users(id, name, stars, level, xp, verified, gender)`)
     .eq('is_active', true)
     .order('created_at', { ascending: false });
   if (error) console.error('fetchNearbyPosts:', error.message);

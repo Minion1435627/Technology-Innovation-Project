@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
 
 // Match CoverScreen palette
 const GREEN      = '#86A778';
@@ -17,6 +18,7 @@ const GREEN_LIGHT = '#E4EFD8';
 const STEPS = ['Account', 'Profile', 'Verify'];
 
 export default function RegisterScreen({ navigation }) {
+  const { fetchProfile } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -89,6 +91,7 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
 
+    await fetchProfile(data.user.id);
     navigation.replace('Onboarding');
   };
 
@@ -239,6 +242,9 @@ export default function RegisterScreen({ navigation }) {
                     autoCapitalize="none"
                   />
                 </View>
+                <View style={styles.unavailableNotice}>
+                  <Text style={styles.unavailableText}>⚠ This feature is not available yet</Text>
+                </View>
 
                 <TouchableOpacity style={styles.skipBtn}>
                   <Text style={styles.skipText}>Skip for now</Text>
@@ -335,6 +341,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     ...typography.body,
+    lineHeight: undefined,
     color: colors.textPrimary,
     marginBottom: 16,
     borderWidth: 1,
@@ -371,8 +378,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
+  unavailableNotice: {
+    backgroundColor: '#FFF3CD',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+    alignSelf: 'stretch',
+  },
+  unavailableText: { ...typography.small, color: '#856404', textAlign: 'center' },
   verifyEmoji: { fontSize: 36, marginBottom: 8 },
   verifyTitle: { ...typography.h4, color: colors.textPrimary, marginBottom: 4 },
   verifyDesc: { ...typography.small, color: colors.textSecondary, textAlign: 'center', marginBottom: 16 },

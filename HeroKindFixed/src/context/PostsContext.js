@@ -2,6 +2,16 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createPost, deletePost, fetchNearbyPosts } from '../lib/db';
 import { useAuth } from './AuthContext';
 
+const XP_LEVELS = [
+  { level: 1, xp: 0 },
+  { level: 2, xp: 100 },
+  { level: 3, xp: 200 },
+  { level: 4, xp: 500 },
+  { level: 5, xp: 1000 },
+];
+const getLevelFromXp = (xp) =>
+  XP_LEVELS.reduce((lvl, rule) => (xp ?? 0) >= rule.xp ? rule.level : lvl, 1);
+
 const PostsContext = createContext(null);
 
 export function PostsProvider({ children }) {
@@ -28,7 +38,7 @@ export function PostsProvider({ children }) {
           id:       p.users?.id,
           name:     p.users?.name,
           stars:    p.users?.stars,
-          level:    p.users?.level,
+          level:    getLevelFromXp(p.users?.xp ?? p.users?.level),
           verified: p.users?.verified,
           gender:   p.users?.gender,
         },

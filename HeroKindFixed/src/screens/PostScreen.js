@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-   ScrollView, KeyboardAvoidingView, Platform, Alert,
+   ScrollView, KeyboardAvoidingView, Platform, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { usePosts } from '../context/PostsContext';
 import { usePrivacy } from '../context/PrivacyContext';
 import { useAuth } from '../context/AuthContext';
@@ -59,6 +60,44 @@ export default function PostScreen({ navigation, route }) {
   });
   const [photos, setPhotos] = useState([]);
 
+  const pickPhoto = () => {
+    Alert.alert('Add photo', 'Choose a source', [
+      {
+        text: 'Camera',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission required', 'Please allow camera access in Settings.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+          if (!result.canceled && result.assets?.[0]) {
+            setPhotos(p => [...p, result.assets[0].uri]);
+          }
+        },
+      },
+      {
+        text: 'Photo Library',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission required', 'Please allow photo library access in Settings.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 });
+          if (!result.canceled && result.assets?.[0]) {
+            setPhotos(p => [...p, result.assets[0].uri]);
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const removePhoto = (index) => {
+    setPhotos(p => p.filter((_, i) => i !== index));
+  };
+
   const categories = postType === 'need' ? NEED_CATEGORIES : SUPPLY_CATEGORIES;
   const accentColor = postType === 'need' ? colors.need : colors.supply;
   const accentBg = postType === 'need' ? colors.needLight : colors.supplyLight;
@@ -97,6 +136,7 @@ export default function PostScreen({ navigation, route }) {
         gender: currentUser?.gender,
         stars: currentUser?.stars,
       },
+      photos: photos.length > 0 ? photos : undefined,
       timePosted: 'just now',
       expiresAt: Date.now() + (EXPIRY_MS[form.expiry] ?? EXPIRY_MS['7 days']),
     };
@@ -276,17 +316,17 @@ export default function PostScreen({ navigation, route }) {
           <View style={styles.field}>
             <Text style={styles.label}>Photos (optional, up to 3)</Text>
             <View style={styles.photoRow}>
-              {photos.map((_, i) => (
+              {photos.map((uri, i) => (
                 <View key={i} style={styles.photoThumb}>
-                  <Text style={styles.photoThumbText}>📷</Text>
+                  <Image source={{ uri }} style={styles.photoThumbImage} />
+                  <TouchableOpacity style={styles.photoRemoveBtn} onPress={() => removePhoto(i)}>
+                    <Ionicons name="close-circle" size={20} color="#fff" />
+                  </TouchableOpacity>
                 </View>
               ))}
               {photos.length < 3 && (
-                <TouchableOpacity
-                  style={styles.addPhotoBtn}
-                  onPress={() => setPhotos(p => [...p, p.length])}
-                >
-                  <Text style={styles.addPhotoIcon}>+</Text>
+                <TouchableOpacity style={styles.addPhotoBtn} onPress={pickPhoto}>
+                  <Ionicons name="camera-outline" size={22} color={colors.textMuted} />
                   <Text style={styles.addPhotoText}>Add photo</Text>
                 </TouchableOpacity>
               )}
@@ -353,6 +393,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     ...typography.body,
+    lineHeight: undefined,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.border,
@@ -373,16 +414,19 @@ const styles = StyleSheet.create({
   chipText: { ...typography.small, color: colors.textSecondary },
   chipTextActive: { color: colors.primary, fontWeight: '600' },
 
-  photoRow: { flexDirection: 'row', gap: 10 },
+  photoRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   photoThumb: {
-    width: 80,
-    height: 80,
-    backgroundColor: colors.border,
+    width: 80, height: 80,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  photoThumbText: { fontSize: 28 },
+  photoThumbImage: { width: '100%', height: '100%' },
+  photoRemoveBtn: {
+    position: 'absolute', top: 4, right: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 10,
+  },
   addPhotoBtn: {
     width: 80,
     height: 80,
