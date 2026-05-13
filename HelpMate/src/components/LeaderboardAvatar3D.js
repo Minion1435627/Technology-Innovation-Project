@@ -31,7 +31,7 @@ export default function LeaderboardAvatar3D({ modelUrl, size = 64, onReady, onLo
   const onContextCreate = async (gl) => {
     const renderer = new Renderer({ gl });
     renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-    renderer.setClearColor(0xfffcf9, 1);
+    renderer.setClearColor(0xfffcf9, 0);
     if ('outputColorSpace' in renderer && THREE.SRGBColorSpace) {
       renderer.outputColorSpace = THREE.SRGBColorSpace;
     } else if ('outputEncoding' in renderer && THREE.sRGBEncoding) {
@@ -200,9 +200,9 @@ export default function LeaderboardAvatar3D({ modelUrl, size = 64, onReady, onLo
         {
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: 0,
           overflow: 'hidden',
-          backgroundColor: '#fffdf9',
+          backgroundColor: 'transparent',
         },
         style,
       ]}
@@ -270,6 +270,6 @@ const styles = StyleSheet.create({
   loadingOverlay: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fffdf9',
+    backgroundColor: 'transparent',
   },
 });
