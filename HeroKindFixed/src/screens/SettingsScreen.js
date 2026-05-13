@@ -28,9 +28,9 @@ export default function SettingsScreen({ navigation }) {
       {
         text: 'Log out',
         style: 'destructive',
-        onPress: async () => {
-          await signOut();
+        onPress: () => {
           navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Login' }] });
+          signOut();
         },
       },
     ]);

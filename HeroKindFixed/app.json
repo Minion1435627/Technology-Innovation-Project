@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.helpmate.app",
       "config": {
-        "googleMapsApiKey": "AIzaSyDgrspBzEcBMc8vOj6pr86bvrvRTxGUAdI"
+        "googleMapsApiKey": "AIzaSyBwz-LEg2B0sT0MIvjZRdZmx7zUYCide9s"
       },
       "infoPlist": {
         "NSAppTransportSecurity": {
@@ -39,7 +39,7 @@
       "edgeToEdgeEnabled": true,
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyDgrspBzEcBMc8vOj6pr86bvrvRTxGUAdI"
+          "apiKey": "AIzaSyBwz-LEg2B0sT0MIvjZRdZmx7zUYCide9s"
         }
       }
     },
