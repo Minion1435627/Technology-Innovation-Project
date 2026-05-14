@@ -41,3 +41,7 @@ yarn-error.*
 /android
 .claude/
 .claude/
+
+# iOS Pods (regenerated per machine)
+ios/Pods/
+ios/Podfile.lock
