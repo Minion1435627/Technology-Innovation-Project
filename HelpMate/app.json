@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "HelpMate",
+    "slug": "HeroKindFixed",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/AppIcon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.helpmate.app",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBwz-LEg2B0sT0MIvjZRdZmx7zUYCide9s"
+      },
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "api.tripo3d.ai": {
+              "NSExceptionAllowsInsecureHTTPLoads": false,
+              "NSIncludesSubdomains": true,
+              "NSExceptionMinimumTLSVersion": "TLSv1.2"
+            }
+          }
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/AppIcon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBwz-LEg2B0sT0MIvjZRdZmx7zUYCide9s"
+        }
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "helpmate",
+    "plugins": [
+      "expo-web-browser"
+    ]
+  }
+}
