@@ -245,24 +245,24 @@ function FilterPill({ label, active, onPress }) {
 }
 
 // ─── F1-style top-3 card ──────────────────────────────────────────────────────
-// Avatar floats above the card in an absolutely-positioned layer so it is not
-// clipped by the card boundary — giving the illusion it stands in front.
+// The wrapper owns the full card height. The card is pinned behind via
+// absoluteFill. The avatar is a separate absolutely-positioned layer with
+// zIndex:10, so it renders in front and is never clipped by the card.
 function TopThreeCard({ user, rankIdx, scoreLabel }) {
-  const isFirst        = rankIdx === 0;
-  const avatarSize     = isFirst ? 170 : 130; // height of the floating avatar container
-  const avatarOverhang = isFirst ? 100 : 80;  // px the avatar rises above the card top
-  const cardH          = isFirst ? 190 : 155; // card body height (footer + breathing room)
-  const initialsSize   = isFirst ? 88 : 70;
+  const isFirst      = rankIdx === 0;
+  const cardH        = isFirst ? 300 : 248;
+  const avatarAreaH  = isFirst ? 210 : 170;
+  const initialsSize = isFirst ? 88 : 70;
 
   return (
-    // Wrapper provides room for the avatar above the card
-    <View style={[styles.topCardWrapper, { paddingTop: avatarOverhang }]}>
+    <View style={[styles.topCardWrapper, { height: cardH }]}>
 
-      {/* Card body — no avatar inside, just accent bar, watermark, medal, footer */}
+      {/* Card — fills wrapper, clips only its own internal decorations */}
       <View
         style={[
           styles.topCard,
-          { height: cardH, backgroundColor: TOP3_BG[rankIdx], borderColor: TOP3_BORDER[rankIdx] },
+          StyleSheet.absoluteFill,
+          { backgroundColor: TOP3_BG[rankIdx], borderColor: TOP3_BORDER[rankIdx] },
           isFirst && styles.firstCard,
         ]}
       >
@@ -273,7 +273,7 @@ function TopThreeCard({ user, rankIdx, scoreLabel }) {
         <View style={[styles.medalChip, { backgroundColor: TOP3_ACCENT[rankIdx] + '28', top: 10 }]}>
           <Text style={styles.medalEmoji}>{MEDALS[rankIdx]}</Text>
         </View>
-        {/* Footer pinned to the bottom of the card */}
+        {/* Footer pinned to bottom of card */}
         <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
           <View style={[styles.cardFooter, { borderTopColor: TOP3_BORDER[rankIdx] + '66' }]}>
             <Text style={styles.cardName} numberOfLines={1}>{user.name}</Text>
@@ -288,18 +288,16 @@ function TopThreeCard({ user, rankIdx, scoreLabel }) {
         </View>
       </View>
 
-      {/* Avatar layer — floats in front of and above the card */}
+      {/* Avatar — in front of the card, not inside it, so never clipped */}
       <View
         style={{
           position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: avatarSize,
+          top: 0, left: 0, right: 0,
+          height: avatarAreaH,
           zIndex: 10,
         }}
       >
-        <CardAvatar user={user} stageH={avatarSize} initialsSize={initialsSize} />
+        <CardAvatar user={user} stageH={avatarAreaH} initialsSize={initialsSize} />
       </View>
     </View>
   );
