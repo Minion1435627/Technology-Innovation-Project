@@ -1,29 +1,30 @@
 export const colors = {
-  // Brand
-  primary: '#86A778',
-  primaryLight: '#E4EFD8',
-  primaryDark: '#41503C',
+  // Brand — bright mint works on dark backgrounds
+  primary: '#70C894',
+  primaryLight: 'rgba(112,200,148,0.14)',
+  primaryDark: '#3D8F62',
   accent: '#FF6B6B',
 
   // Map markers
   need: '#FF4757',
-  needLight: '#FFE5E8',
+  needLight: '#3D1215',
   supply: '#26de81',
-  supplyLight: '#E3FBF0',
+  supplyLight: '#0F2D1F',
   friend: '#45aaf2',
-  friendLight: '#E8F5FE',
+  friendLight: '#0D2234',
   myLocation: '#FED330',
 
-  // UI
-  background: '#F7F3EF',
-  card: '#FFFCF9',
-  border: '#EDE5DC',
-  shadow: 'rgba(0,0,0,0.07)',
+  // UI base
+  background: '#0E1117',
+  card: '#161921',
+  surface: '#1D2130',
+  border: '#252A38',
+  shadow: 'rgba(0,0,0,0.45)',
 
-  // Text
-  textPrimary: '#2C2420',
-  textSecondary: '#7A6E68',
-  textMuted: '#B8ADA6',
+  // Text hierarchy
+  textPrimary: '#E8E6F0',
+  textSecondary: '#8B93A8',
+  textMuted: '#454D62',
   textWhite: '#FFFFFF',
 
   // Status
@@ -46,6 +47,6 @@ export const colors = {
   level5: '#F1C40F',
 
   // Misc
-  overlay: 'rgba(0,0,0,0.5)',
+  overlay: 'rgba(0,0,0,0.75)',
   transparent: 'transparent',
 };

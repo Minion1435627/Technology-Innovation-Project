@@ -31,7 +31,7 @@ export default function LeaderboardAvatar3D({ modelUrl, size = 64, onReady, onLo
   const onContextCreate = async (gl) => {
     const renderer = new Renderer({ gl });
     renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-    renderer.setClearColor(0xfffcf9, 0);
+    renderer.setClearColor(0x0E1117, 0);
     if ('outputColorSpace' in renderer && THREE.SRGBColorSpace) {
       renderer.outputColorSpace = THREE.SRGBColorSpace;
     } else if ('outputEncoding' in renderer && THREE.sRGBEncoding) {

@@ -13,8 +13,8 @@ const GAMES = [
     tagline: 'Grow & harvest crops',
     xp: '+20 XP',
     badge: '🌾',
-    badgeColor: '#6a9e5a',
-    badgeBg: '#e8f5e0',
+    badgeColor: '#70C894',
+    badgeBg: 'rgba(112,200,148,0.14)',
     border: colors.primary,
   },
   {
@@ -24,9 +24,9 @@ const GAMES = [
     tagline: 'Cast a line & catch fish',
     xp: '+20 XP',
     badge: '🎣',
-    badgeColor: '#3a7fbf',
-    badgeBg: '#dceeff',
-    border: '#6aaee0',
+    badgeColor: '#45aaf2',
+    badgeBg: 'rgba(69,170,242,0.14)',
+    border: '#45aaf2',
   },
 ];
 
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
   },
   badgePill: {
     flexDirection: 'row',

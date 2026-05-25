@@ -91,8 +91,8 @@ const STATUS_CONFIG = {
   },
   pending: {
     label: 'Pending',
-    color: '#C07A00',
-    bg: '#FFF4D6',
+    color: '#E09A30',
+    bg: '#261E0A',
     icon: 'hourglass',
     priority: 5,
   },
@@ -105,8 +105,8 @@ const STATUS_CONFIG = {
   },
   disputed: {
     label: 'Disputed',
-    color: '#9c36b5',
-    bg: '#f8f0fc',
+    color: '#C058E0',
+    bg: '#1A0F22',
     icon: 'warning',
     priority: 3,
   },
@@ -321,6 +321,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   headerBadgeValue: {
     ...typography.bodyBold,

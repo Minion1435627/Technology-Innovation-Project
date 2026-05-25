@@ -100,7 +100,7 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
   const onContextCreate = async (gl) => {
     const renderer = new Renderer({ gl });
     renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-    renderer.setClearColor(0xfffcf9, 1);
+    renderer.setClearColor(0x0E1117, 1);
     if ('outputColorSpace' in renderer && THREE.SRGBColorSpace) {
       renderer.outputColorSpace = THREE.SRGBColorSpace;
     } else if ('outputEncoding' in renderer && THREE.sRGBEncoding) {
@@ -336,13 +336,13 @@ export default function Avatar3DViewer({ modelUrl, rotation = 0, style, onLoadEr
 }
 
 const styles = StyleSheet.create({
-  container: { overflow: 'hidden', backgroundColor: '#fffdf9' },
+  container: { overflow: 'hidden', backgroundColor: '#0E1117' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#fffdf9',
+    backgroundColor: '#0E1117',
   },
   hint: { fontSize: 12, color: '#999' },
   err: { fontSize: 12, color: '#e03131', textAlign: 'center', paddingHorizontal: 20 },
