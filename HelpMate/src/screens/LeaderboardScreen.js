@@ -245,39 +245,61 @@ function FilterPill({ label, active, onPress }) {
 }
 
 // ─── F1-style top-3 card ──────────────────────────────────────────────────────
+// Avatar floats above the card in an absolutely-positioned layer so it is not
+// clipped by the card boundary — giving the illusion it stands in front.
 function TopThreeCard({ user, rankIdx, scoreLabel }) {
-  const isFirst      = rankIdx === 0;
-  const cardH        = isFirst ? 300 : 248;
-  const avatarAreaH  = isFirst ? 210 : 170;
-  const initialsSize = isFirst ? 88 : 70;
+  const isFirst        = rankIdx === 0;
+  const avatarSize     = isFirst ? 170 : 130; // height of the floating avatar container
+  const avatarOverhang = isFirst ? 100 : 80;  // px the avatar rises above the card top
+  const cardH          = isFirst ? 190 : 155; // card body height (footer + breathing room)
+  const initialsSize   = isFirst ? 88 : 70;
 
   return (
-    <View
-      style={[
-        styles.topCard,
-        { height: cardH, backgroundColor: TOP3_BG[rankIdx], borderColor: TOP3_BORDER[rankIdx] },
-        isFirst && styles.firstCard,
-      ]}
-    >
-      <View style={[styles.accentBar, { backgroundColor: TOP3_ACCENT[rankIdx] }]} />
-      <Text style={[styles.rankWatermark, { color: TOP3_ACCENT[rankIdx] + '1E' }]}>
-        {rankIdx + 1}
-      </Text>
-      <View style={[styles.medalChip, { backgroundColor: TOP3_ACCENT[rankIdx] + '28', top: 10 }]}>
-        <Text style={styles.medalEmoji}>{MEDALS[rankIdx]}</Text>
-      </View>
-      <View style={[styles.avatarStage, { height: avatarAreaH }]}>
-        <CardAvatar user={user} stageH={avatarAreaH} initialsSize={initialsSize} />
-      </View>
-      <View style={[styles.cardFooter, { borderTopColor: TOP3_BORDER[rankIdx] + '66' }]}>
-        <Text style={styles.cardName} numberOfLines={1}>{user.name}</Text>
-        <Text style={[styles.cardPts, { color: TOP3_ACCENT[rankIdx] }]}>
-          {user.score}{' '}
-          <Text style={styles.cardPtsUnit}>{scoreLabel}</Text>
+    // Wrapper provides room for the avatar above the card
+    <View style={[styles.topCardWrapper, { paddingTop: avatarOverhang }]}>
+
+      {/* Card body — no avatar inside, just accent bar, watermark, medal, footer */}
+      <View
+        style={[
+          styles.topCard,
+          { height: cardH, backgroundColor: TOP3_BG[rankIdx], borderColor: TOP3_BORDER[rankIdx] },
+          isFirst && styles.firstCard,
+        ]}
+      >
+        <View style={[styles.accentBar, { backgroundColor: TOP3_ACCENT[rankIdx] }]} />
+        <Text style={[styles.rankWatermark, { color: TOP3_ACCENT[rankIdx] + '1E' }]}>
+          {rankIdx + 1}
         </Text>
-        {user.neighbourhood ? (
-          <Text style={styles.cardNeighbourhood} numberOfLines={1}>📍 {user.neighbourhood}</Text>
-        ) : null}
+        <View style={[styles.medalChip, { backgroundColor: TOP3_ACCENT[rankIdx] + '28', top: 10 }]}>
+          <Text style={styles.medalEmoji}>{MEDALS[rankIdx]}</Text>
+        </View>
+        {/* Footer pinned to the bottom of the card */}
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+          <View style={[styles.cardFooter, { borderTopColor: TOP3_BORDER[rankIdx] + '66' }]}>
+            <Text style={styles.cardName} numberOfLines={1}>{user.name}</Text>
+            <Text style={[styles.cardPts, { color: TOP3_ACCENT[rankIdx] }]}>
+              {user.score}{' '}
+              <Text style={styles.cardPtsUnit}>{scoreLabel}</Text>
+            </Text>
+            {user.neighbourhood ? (
+              <Text style={styles.cardNeighbourhood} numberOfLines={1}>📍 {user.neighbourhood}</Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
+      {/* Avatar layer — floats in front of and above the card */}
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: avatarSize,
+          zIndex: 10,
+        }}
+      >
+        <CardAvatar user={user} stageH={avatarSize} initialsSize={initialsSize} />
       </View>
     </View>
   );
@@ -417,7 +439,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   topThreeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  topCard: { flex: 1, borderRadius: 16, borderWidth: 1.5, overflow: 'hidden' },
+  topCardWrapper: { flex: 1 },
+  topCard: { borderRadius: 16, borderWidth: 1.5, overflow: 'hidden' },
   firstCard: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -436,7 +459,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 2, zIndex: 2,
   },
   medalEmoji: { fontSize: 14, lineHeight: 19 },
-  avatarStage: { overflow: 'hidden', position: 'relative' },
   initialsCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   cardFooter: {
     borderTopWidth: 1, paddingHorizontal: 7, paddingVertical: 6,
