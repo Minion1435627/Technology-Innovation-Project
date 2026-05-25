@@ -327,7 +327,7 @@ function LeaderboardRow({ user, isMe, isTop3, scoreLabel, maxScore }) {
           style={{
             position: 'absolute', left: 0, top: 0, bottom: 0,
             width: `${fillRatio * 100}%`,
-            backgroundColor: isMe ? '#F0A45B' + '50' : '#F0A45B' + '2E',
+            backgroundColor: '#F0A45B' + 'B3',
           }}
         />
       )}
@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
     padding: 12, paddingHorizontal: 16, gap: 12,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  rowMe: { backgroundColor: colors.primaryLight },
+  rowMe: {},
   rankCircle: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center',
