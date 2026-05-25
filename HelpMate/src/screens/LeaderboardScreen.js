@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Modal,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
@@ -67,8 +66,9 @@ export default function LeaderboardScreen({ navigation }) {
     });
   }, [timeframe, suburb, category]);
 
-  const top3 = leaderboard.slice(0, 3);
-  const rest  = leaderboard.slice(3);
+  const top3     = leaderboard.slice(0, 3);
+  const rest     = leaderboard.slice(3);
+  const maxScore = Math.max(leaderboard[0]?.score ?? 0, 1);
 
   const timeframeLabel = TIMEFRAME_OPTIONS.find(t => t.key === timeframe)?.label ?? 'This Week';
   const categoryLabel  = TASK_CATEGORIES.find(c => c.key === category)?.label ?? 'All Tasks';
@@ -108,12 +108,7 @@ export default function LeaderboardScreen({ navigation }) {
       </View>
 
       {/* ── Filter bar ──────────────────────────────────────────────────── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBarScroll}
-        contentContainerStyle={styles.filterBarContent}
-      >
+      <View style={styles.filterBar}>
         <FilterPill
           label={timeframeLabel}
           active={timeframe !== 'this_week'}
@@ -129,7 +124,7 @@ export default function LeaderboardScreen({ navigation }) {
           active={!!category}
           onPress={() => setActiveFilter('category')}
         />
-      </ScrollView>
+      </View>
 
       <ScrollView contentContainerStyle={styles.container}>
 
@@ -183,7 +178,7 @@ export default function LeaderboardScreen({ navigation }) {
         <View style={styles.fullList}>
           <Text style={styles.fullListTitle}>Full Rankings</Text>
           {top3.map(user => (
-            <LeaderboardRow key={user.rank} user={user} isMe={user.id === authUser?.id} isTop3 scoreLabel={scoreLabel} />
+            <LeaderboardRow key={user.rank} user={user} isMe={user.id === authUser?.id} isTop3 scoreLabel={scoreLabel} maxScore={maxScore} />
           ))}
           {rest.length > 0 && (
             <View style={styles.listDivider}>
@@ -193,7 +188,7 @@ export default function LeaderboardScreen({ navigation }) {
             </View>
           )}
           {rest.map(user => (
-            <LeaderboardRow key={user.rank} user={user} isMe={user.id === authUser?.id} scoreLabel={scoreLabel} />
+            <LeaderboardRow key={user.rank} user={user} isMe={user.id === authUser?.id} scoreLabel={scoreLabel} maxScore={maxScore} />
           ))}
         </View>
 
@@ -320,10 +315,22 @@ function CardAvatar({ user, stageH, initialsSize }) {
 }
 
 // ─── Full rankings row ────────────────────────────────────────────────────────
-function LeaderboardRow({ user, isMe, isTop3, scoreLabel }) {
-  const rankColor = isTop3 ? TOP3_BORDER[user.rank - 1] : colors.textMuted;
+function LeaderboardRow({ user, isMe, isTop3, scoreLabel, maxScore }) {
+  const rankColor  = isTop3 ? TOP3_BORDER[user.rank - 1] : colors.textMuted;
+  const fillRatio  = maxScore > 0 ? user.score / maxScore : 0;
   return (
     <View style={[styles.row, isMe && styles.rowMe]}>
+      {/* Score fill bar — sits behind all row content */}
+      {fillRatio > 0 && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0,
+            width: `${fillRatio * 100}%`,
+            backgroundColor: isMe ? colors.primary + '30' : colors.primary + '18',
+          }}
+        />
+      )}
       <View style={[styles.rankCircle, isTop3 && { backgroundColor: rankColor + '33' }]}>
         <Text style={[styles.rankText, isTop3 && { color: rankColor }]}>{user.rank}</Text>
       </View>
@@ -359,24 +366,24 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.h3, color: colors.textPrimary },
 
   // ── Filter bar ────────────────────────────────────────────────────────────
-  filterBarScroll: {
+  filterBar: {
+    flexDirection: 'row',
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-  },
-  filterBarContent: {
-    flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 8,
   },
   filterPill: {
+    flex: 1,
     borderRadius: 20,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 6,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
   },
   filterPillActive: {
     backgroundColor: colors.primaryLight,
