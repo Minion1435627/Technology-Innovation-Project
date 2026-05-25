@@ -327,7 +327,7 @@ function LeaderboardRow({ user, isMe, isTop3, scoreLabel, maxScore }) {
           style={{
             position: 'absolute', left: 0, top: 0, bottom: 0,
             width: `${fillRatio * 100}%`,
-            backgroundColor: isMe ? colors.primary + '30' : colors.primary + '18',
+            backgroundColor: isMe ? '#F0A45B' + '50' : '#F0A45B' + '2E',
           }}
         />
       )}
