@@ -453,6 +453,74 @@ export async function fetchLeaderboard() {
   return data ?? [];
 }
 
+export async function fetchNeighbourhoods() {
+  const { data, error } = await supabase
+    .from('users')
+    .select('neighbourhood')
+    .not('neighbourhood', 'is', null)
+    .neq('neighbourhood', '');
+  if (error) { console.warn('fetchNeighbourhoods:', error.message); return []; }
+  return [...new Set(data.map(r => r.neighbourhood).filter(Boolean))].sort();
+}
+
+const TIMEFRAME_DAYS = {
+  this_week: 7, past_3_weeks: 21, this_month: 30, last_3_months: 90, this_year: 365,
+};
+
+export async function fetchLeaderboardWithFilters({ timeframe = 'this_week', suburb = null, category = null } = {}) {
+  // Default / suburb-only: use pre-computed weekly_score
+  if (!category && timeframe === 'this_week') {
+    let q = supabase
+      .from('users')
+      .select('id, name, level, xp, stars, weekly_score, neighbourhood, avatar_url, avatar_storage_path')
+      .order('weekly_score', { ascending: false })
+      .limit(50);
+    if (suburb) q = q.eq('neighbourhood', suburb);
+    const { data, error } = await q;
+    if (error) console.warn('fetchLeaderboardWithFilters:', error.message);
+    return { data: (data ?? []).map(r => ({ ...r, score: r.weekly_score ?? 0 })), scoreLabel: 'pts' };
+  }
+
+  // Time-range or category filter: aggregate from completed transactions
+  const days = TIMEFRAME_DAYS[timeframe] ?? 7;
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const { data: txData, error: txError } = await supabase
+    .from('transactions')
+    .select('provider_id, requester_id, post:post_id(category)')
+    .eq('status', 'completed')
+    .gte('completed_date', since.toISOString());
+  if (txError) { console.warn('fetchLeaderboardWithFilters tx:', txError.message); return { data: [], scoreLabel: 'tasks' }; }
+
+  const filtered = category ? txData.filter(t => t.post?.category === category) : txData;
+
+  const scoreMap = {};
+  filtered.forEach(tx => {
+    [tx.provider_id, tx.requester_id].filter(Boolean).forEach(uid => {
+      scoreMap[uid] = (scoreMap[uid] || 0) + 1;
+    });
+  });
+
+  const userIds = Object.keys(scoreMap);
+  if (userIds.length === 0) return { data: [], scoreLabel: 'tasks' };
+
+  let usersQ = supabase
+    .from('users')
+    .select('id, name, level, xp, stars, neighbourhood, avatar_url, avatar_storage_path')
+    .in('id', userIds);
+  if (suburb) usersQ = usersQ.eq('neighbourhood', suburb);
+
+  const { data: usersData, error: usersError } = await usersQ;
+  if (usersError) { console.warn('fetchLeaderboardWithFilters users:', usersError.message); return { data: [], scoreLabel: 'tasks' }; }
+
+  const ranked = usersData
+    .map(u => ({ ...u, score: scoreMap[u.id] ?? 0 }))
+    .sort((a, b) => b.score - a.score);
+
+  return { data: ranked, scoreLabel: 'tasks' };
+}
+
 export async function createTransaction(tx) {
   if (tx.chat_id) {
     const { data: existing, error: existingError } = await supabase
