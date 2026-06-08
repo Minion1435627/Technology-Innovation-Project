@@ -59,7 +59,7 @@ Make sure you have the following installed before you begin:
 **1. Clone the repository**
 
 ```bash
-git clone https://github.com/YOUR_ORG/HelpMate.git
+git clone https://github.com/Minion1435627/Technology-Innovation-Project.git
 cd HelpMate
 ```
 
