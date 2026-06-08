@@ -234,7 +234,7 @@ The HelpMate interface was designed in Figma and refined over multiple iteration
 
 ## App Overview
 
-The HelpMate mobile app is built with React Native + Expo and connects to a Supabase backend. See the [HelpMate app README](https://github.com/Minion1435627/Technology-Innovation-Project) for full installation and setup instructions.
+The HelpMate mobile app is built with React Native + Expo and connects to a Supabase backend. See the [All Features Design](https://github.com/Minion1435627/Technology-Innovation-Project/blob/main/All_Features_Design.md) and [Install Guideline](https://github.com/Minion1435627/Technology-Innovation-Project/blob/main/Install_Guideline.md)for full installation and setup instructions.
 
 **Quick start for testers (Expo Go — no Xcode or cable required):**
 ```bash
