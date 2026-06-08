@@ -200,7 +200,7 @@ export default function CoverScreen({ navigation }) {
         <MapIllustration />
 
         <Text style={styles.appName}>HelpMate</Text>
-        <Text style={styles.tagline}>can keep you safe</Text>
+        <Text style={styles.tagline}>Don't hesitate use HelpMate</Text>
         <Divider />
 
         <View style={styles.featureRow}>

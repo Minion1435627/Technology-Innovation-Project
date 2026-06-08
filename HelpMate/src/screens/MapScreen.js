@@ -34,6 +34,13 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
 const FALLBACK_LOCATION = { latitude: -37.8144, longitude: 144.9398 };
 
 const PIN_COLOR  = { need: colors.need, supply: colors.supply, friend: colors.friend };
+
+// Returns up to 2 initials from a full name, e.g. "John Doe" → "JD", "Alice" → "AL"
+function getInitials(name = '') {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 const PIN_BORDER = { need: '#ff6b6b', supply: '#51cf66', friend: '#74c0fc' };
 const GENDER_ICON = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
 const GENDER_COLOR = { Male: '#4dabf7', Female: '#f783ac', 'Non-binary': '#a78bfa' };
@@ -76,7 +83,7 @@ function PinMarker({ pin }) {
       <View style={[styles.pinRing, { borderColor: color }]}>
         {/* Coloured avatar circle */}
         <View style={[styles.pinAvatar, { backgroundColor: color }]}>
-          <Text style={styles.pinInitial}>{pin.poster.name.charAt(0)}</Text>
+          <Text style={styles.pinInitial}>{getInitials(pin.poster.name)}</Text>
         </View>
       </View>
     </View>
@@ -248,18 +255,31 @@ export default function MapScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Legend — horizontal row under search bar */}
+        {/* Legend — horizontal row under search bar — tap to toggle filter */}
         <View style={[styles.legend, { top: insets.top + 66 }]}>
           {[
-            { color: colors.need,   label: 'Need' },
-            { color: colors.supply, label: 'Supply' },
-            { color: colors.friend, label: 'Friend' },
-          ].map(item => (
-            <View key={item.label} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-              <Text style={styles.legendLabel}>{item.label}</Text>
-            </View>
-          ))}
+            { key: 'need',   color: colors.need,   label: 'Need' },
+            { key: 'supply', color: colors.supply, label: 'Supply' },
+            { key: 'friend', color: colors.friend, label: 'Friend' },
+          ].map(item => {
+            const active = filters[item.key];
+            return (
+              <TouchableOpacity
+                key={item.label}
+                style={[
+                  styles.legendItem,
+                  active
+                    ? { backgroundColor: '#fff', borderColor: item.color, borderWidth: 1.5 }
+                    : { backgroundColor: '#fff', borderColor: '#ccc', borderWidth: 1.5, opacity: 0.5 },
+                ]}
+                onPress={() => setFilters(f => ({ ...f, [item.key]: !f[item.key] }))}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.legendDot, { backgroundColor: active ? item.color : '#bbb' }]} />
+                <Text style={[styles.legendLabel, { color: active ? item.color : '#aaa' }]}>{item.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Recenter — blue arrow icon */}
@@ -762,7 +782,7 @@ const styles = StyleSheet.create({
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
   },
-  pinInitial: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  pinInitial: { fontSize: 12, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
 
   // ── Nearby button (search bar) ──
   nearbyBtn: {
