@@ -1,0 +1,13 @@
+too much features 
+-> solution: we will write in the report, won't display in the video
+-> chat part: won't include transaction part in the video, but should include in the report
+target users (scenario) -> need to clarify in ther report
+change the slogan: HelpMate, keep u relate; Don't hesitate, here's ur helpmate; HelpMate, save help not wait; Turn ur block into ur squad
+filter should be able to click in the map: make it allow to click
+the marker need to contain two letters not only one: chage 
+mini-game doesn't have positive relation with our app
+categories in the leaderboard (based on the different kind of tasks) -> add one more filter
+
+
+Anita: Readme file
+

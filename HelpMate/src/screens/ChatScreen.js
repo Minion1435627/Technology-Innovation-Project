@@ -1,0 +1,3747 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View, Text, TouchableOpacity, StyleSheet,
+  FlatList, TextInput, KeyboardAvoidingView, Platform, Modal, ScrollView, Alert, PanResponder, Keyboard,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
+import Avatar from '../components/Avatar';
+import { Ionicons } from '@expo/vector-icons';
+import { useChats } from '../context/ChatContext';
+import { fetchMessages, sendMessage as dbSendMessage, createTransaction, updateTransaction, updateTransactionStatus, createChatWithPost, fetchTransactionById, fetchTransactionByChat, fetchTransactionsByChat, deletePendingTransactionsByChat, deletePendingTransactionById, createNotification, markMessagesRead } from '../lib/db';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import { usePosts } from '../context/PostsContext';
+
+const ATTACHMENT_PROOF_OPTIONS = [
+  { id: 'general', label: 'General photo' },
+  { id: 'handover', label: 'Handover proof' },
+  { id: 'return', label: 'Return proof' },
+  { id: 'task', label: 'Task proof' },
+  { id: 'evidence', label: 'Evidence' },
+];
+
+const LOCATION_SHARE_OPTIONS = [
+  { id: 'live', label: 'Live location' },
+  { id: 'meetup', label: 'Meet-up spot' },
+  { id: 'onsite', label: 'On-site update' },
+];
+
+const EXCHANGE_META = {
+  c1: {
+    state: 'overdue',
+    type: 'borrow',
+    typeLabel: 'Borrowed item',
+    statusLabel: 'Overdue',
+    countdownText: 'Overdue by 6 hours',
+    summaryText: 'Waiting for provider to confirm return',
+    actionLabel: 'View Exchange',
+  },
+  c2: {
+    state: 'in_progress',
+    type: 'borrow',
+    typeLabel: 'Borrowed item',
+    statusLabel: 'In Progress',
+    countdownText: 'Return due in 1d 4h',
+    summaryText: 'Borrowed item countdown is active',
+    actionLabel: 'View Exchange',
+  },
+  c3: {
+    state: 'due_soon',
+    type: 'service',
+    typeLabel: 'Help / service',
+    statusLabel: 'Due Soon',
+    countdownText: 'Task window ends in 45m',
+    summaryText: 'Provider still needs to mark the task completed',
+    actionLabel: 'View Exchange',
+  },
+  c5: {
+    state: 'pending',
+    type: 'borrow',
+    myRole: 'provider',
+    pendingBy: 'provider',
+    typeLabel: 'Borrowed item',
+    statusLabel: 'Pending',
+    countdownText: 'Waiting for the other side to accept the start request',
+    summaryText: 'A start request has been sent and this exchange is waiting for acceptance',
+    actionLabel: 'View Exchange',
+  },
+  c6: {
+    state: 'in_progress',
+    type: 'borrow',
+    myRole: 'provider',
+    typeLabel: 'Borrowed item',
+    statusLabel: 'In Progress',
+    countdownText: 'Return due in 12h',
+    summaryText: 'Use this thread to test provider return confirmation',
+    actionLabel: 'View Exchange',
+  },
+  c7: {
+    state: 'in_progress',
+    type: 'service',
+    myRole: 'requester',
+    typeLabel: 'Help / service',
+    statusLabel: 'In Progress',
+    countdownText: 'Task window ends in 2h',
+    summaryText: 'This help task is in progress and waiting for the provider to mark it completed',
+    actionLabel: 'View Exchange',
+  },
+  c8: {
+    state: 'overdue',
+    type: 'borrow',
+    myRole: 'requester',
+    typeLabel: 'Borrowed item',
+    statusLabel: 'Overdue',
+    countdownText: 'Overdue by 2d',
+    summaryText: 'This overdue borrower flow should show the requester restriction state',
+    actionLabel: 'View Exchange',
+  },
+  c13: {
+    state: 'completed',
+    type: 'service',
+    myRole: 'provider',
+    typeLabel: 'Help / service',
+    statusLabel: 'Completed',
+    countdownText: 'Review prompt unlocked',
+    summaryText: 'This task is complete and both sides can now leave a review',
+    actionLabel: 'View Exchange',
+  },
+  c14: {
+    state: 'disputed',
+    type: 'borrow',
+    myRole: 'provider',
+    typeLabel: 'Borrowed item',
+    statusLabel: 'Disputed',
+    countdownText: 'Penalties paused during review',
+    summaryText: 'This exchange is under dispute until both sides resolve the issue',
+    actionLabel: 'View Exchange',
+  },
+};
+
+const STATUS_LABELS = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  overdue: 'Overdue',
+  disputed: 'Disputed',
+};
+
+const ACTIVE_TASK_STATUSES = ['pending', 'in_progress', 'overdue', 'disputed'];
+
+const EXCHANGE_SYSTEM_MESSAGES = {
+  c1: [
+    {
+      id: 'sys_c1_1',
+      type: 'system',
+      icon: 'swap-horizontal-outline',
+      title: 'Exchange created',
+      body: 'Borrowed-item exchange was created from this chat.',
+      time: 'Yesterday',
+    },
+    {
+      id: 'sys_c1_2',
+      type: 'system',
+      icon: 'checkmark-circle-outline',
+      title: 'Handover confirmed',
+      body: 'Provider confirmed the handover and the return countdown started.',
+      time: 'Yesterday',
+    },
+    {
+      id: 'sys_c1_3',
+      type: 'system',
+      icon: 'alert-circle-outline',
+      title: 'Exchange overdue',
+      body: 'This borrowed item is overdue and still needs final provider confirmation.',
+      time: '2 hours ago',
+    },
+  ],
+  c2: [
+    {
+      id: 'sys_c2_1',
+      type: 'system',
+      icon: 'swap-horizontal-outline',
+      title: 'Exchange created',
+      body: 'Borrowed-item exchange is now being tracked by both users.',
+      time: 'Today',
+    },
+    {
+      id: 'sys_c2_2',
+      type: 'system',
+      icon: 'sync-outline',
+      title: 'Countdown started',
+      body: 'Provider confirmed handover. Return deadline is now active.',
+      time: 'Today',
+    },
+  ],
+  c3: [
+    {
+      id: 'sys_c3_1',
+      type: 'system',
+      afterId: 'm10',
+      icon: 'swap-horizontal-outline',
+      title: 'Pending',
+      body: 'A start request was sent for this help task and is waiting for the other side to accept.',
+      time: '15 Apr 2026, 1:05 PM',
+    },
+    {
+      id: 'sys_c3_2',
+      type: 'system',
+      afterId: 'm15',
+      icon: 'sync-outline',
+      title: 'Started',
+      body: 'The other side accepted the request. The help-task countdown is now active.',
+      time: '15 Apr 2026, 2:10 PM',
+    },
+    {
+      id: 'sys_c3_3',
+      type: 'system',
+      afterId: 'm18',
+      icon: 'alarm-outline',
+      title: 'Task due soon',
+      body: 'The agreed help window is ending soon. Provider still needs to mark the task completed.',
+      time: '15 Apr 2026, 3:25 PM',
+    },
+  ],
+  c5: [
+    {
+      id: 'sys_c5_1',
+      type: 'system',
+      afterId: 'c5_m3',
+      icon: 'swap-horizontal-outline',
+      title: 'Pending',
+      body: 'A start request was sent for this borrowed-item exchange and it is waiting for acceptance.',
+      time: '15 Apr 2026, 9:00 AM',
+    },
+  ],
+  c6: [
+    {
+      id: 'sys_c6_1',
+      type: 'system',
+      afterId: 'c6_m2',
+      icon: 'swap-horizontal-outline',
+      title: 'Pending',
+      body: 'A start request was sent for this borrowed-item exchange and it waited for acceptance.',
+      time: '15 Apr 2026, 9:05 AM',
+    },
+    {
+      id: 'sys_c6_2',
+      type: 'system',
+      afterId: 'c6_m4',
+      icon: 'sync-outline',
+      title: 'Started',
+      body: 'The other side accepted the request. Countdown started and the borrowed-item flow is now in progress.',
+      time: '15 Apr 2026, 10:10 AM',
+    },
+  ],
+  c7: [
+    {
+      id: 'sys_c7_1',
+      type: 'system',
+      afterId: 'c7_m2',
+      icon: 'swap-horizontal-outline',
+      title: 'Pending',
+      body: 'A start request was sent for this help-task exchange and it waited for acceptance.',
+      time: '15 Apr 2026, 2:00 PM',
+    },
+    {
+      id: 'sys_c7_2',
+      type: 'system',
+      afterId: 'c7_m4',
+      icon: 'sync-outline',
+      title: 'Started',
+      body: 'The other side accepted the request. Countdown started and this service flow is now in progress.',
+      time: '15 Apr 2026, 3:05 PM',
+    },
+  ],
+  c8: [
+    {
+      id: 'sys_c8_1',
+      type: 'system',
+      afterId: 'c8_m2',
+      icon: 'swap-horizontal-outline',
+      title: 'Pending',
+      body: 'A start request was sent for this borrowed-item exchange and it waited for acceptance.',
+      time: '09 Apr 2026, 5:20 PM',
+    },
+    {
+      id: 'sys_c8_2',
+      type: 'system',
+      afterId: 'c8_m5',
+      icon: 'sync-outline',
+      title: 'Started',
+      body: 'The other side accepted the request. Countdown started and the borrowed-item flow moved into progress.',
+      time: '10 Apr 2026, 9:00 AM',
+    },
+    {
+      id: 'sys_c8_3',
+      type: 'system',
+      afterId: 'c8_m8',
+      icon: 'alert-circle-outline',
+      title: 'Exchange overdue',
+      body: 'The return deadline passed without final confirmation, so this borrowed-item exchange is now overdue.',
+      time: '13 Apr 2026, 9:15 AM',
+    },
+  ],
+  c13: [
+    {
+      id: 'sys_c13_1',
+      type: 'system',
+      afterId: 'c13_m1',
+      icon: 'swap-horizontal-outline',
+      title: 'Pending',
+      body: 'A start request was sent for this help-task exchange and it was waiting for acceptance.',
+      time: '14 Apr 2026, 11:00 AM',
+    },
+    {
+      id: 'sys_c13_2',
+      type: 'system',
+      afterId: 'c13_m3',
+      icon: 'sync-outline',
+      title: 'Started',
+      body: 'The other side accepted the request and the help-task exchange moved into progress.',
+      time: '14 Apr 2026, 1:00 PM',
+    },
+    {
+      id: 'sys_c13_3',
+      type: 'system',
+      afterId: 'c13_m4',
+      icon: 'checkmark-circle-outline',
+      title: 'Exchange completed',
+      body: 'The help task has been marked complete. Both sides can now leave a review.',
+      time: '14 Apr 2026, 4:40 PM',
+    },
+  ],
+  c14: [
+    {
+      id: 'sys_c14_1',
+      type: 'system',
+      afterId: 'c14_m1',
+      icon: 'swap-horizontal-outline',
+      title: 'Pending',
+      body: 'A start request was sent for this borrowed-item exchange and it was waiting for acceptance.',
+      time: '12 Apr 2026, 10:30 AM',
+    },
+    {
+      id: 'sys_c14_2',
+      type: 'system',
+      afterId: 'c14_m2',
+      icon: 'sync-outline',
+      title: 'Started',
+      body: 'The other side accepted the request and the borrowed-item exchange moved into progress.',
+      time: '12 Apr 2026, 1:15 PM',
+    },
+    {
+      id: 'sys_c14_3',
+      type: 'system',
+      afterId: 'c14_m4',
+      icon: 'warning-outline',
+      title: 'Dispute raised',
+      body: 'This exchange is under dispute. Penalties are paused while the issue is being reviewed.',
+      time: '14 Apr 2026, 7:10 PM',
+    },
+  ],
+};
+
+const mergeLifecycleIntoMessages = (messageList, lifecycle) => {
+  if (!lifecycle.length) return messageList;
+
+  const grouped = lifecycle.reduce((acc, item) => {
+    const key = item.afterId ?? '__prepend__';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+
+  const merged = [];
+
+  if (grouped.__prepend__) {
+    merged.push(...grouped.__prepend__);
+  }
+
+  messageList.forEach((message) => {
+    merged.push(message);
+    if (grouped[message.id]) {
+      merged.push(...grouped[message.id]);
+    }
+  });
+
+  return merged;
+};
+
+
+
+const CHAT_POST_META = {
+  c4: {
+    title: 'Can help with React / JavaScript questions this afternoon',
+    category: 'Study / skills',
+    typeLabel: 'Supply',
+    description: '3rd year CS student. Happy to help with frontend questions, state handling, and chat flow logic this afternoon.',
+  },
+  c5: {
+    title: 'Need a screwdriver to assemble my IKEA shelf',
+    category: 'Borrow an item',
+    typeLabel: 'Need',
+    description: 'Moving into a new place and just need a Phillips screwdriver for about 30 minutes. Happy to come to you and return it the same day.',
+  },
+  c6: {
+    title: 'Need a screwdriver to finish one last shelf tonight',
+    category: 'Borrow an item',
+    typeLabel: 'Need',
+    description: 'Borrowed the screwdriver already and using it for the last part of my shelf build. I will return it as soon as I am done tonight.',
+  },
+  c7: {
+    title: 'Offering React mentoring for UI flow and state questions',
+    category: 'Offer skills',
+    typeLabel: 'Supply',
+    description: 'Happy to do a short mentoring session for anyone working on React UI, component state, or interaction polish.',
+  },
+  c8: {
+    title: 'Need a screwdriver for shelf assembly, return delayed',
+    category: 'Borrow an item',
+    typeLabel: 'Need',
+    description: 'Still finishing the shelf and I may need a little longer than expected. I will message clearly once the screwdriver is returned.',
+  },
+  c13: {
+    title: 'Can help review your React component structure',
+    category: 'Offer skills',
+    typeLabel: 'Supply',
+    description: 'Offering a short one-on-one session to review component structure, UI flow, and cleaner naming before submission.',
+  },
+  c14: {
+    title: 'Offering drill + bits set for weekend projects',
+    category: 'Lend an item',
+    typeLabel: 'Supply',
+    description: 'Happy to lend my drill and bits set for small home projects. Please return everything together after use.',
+  },
+};
+
+const EXCHANGE_STATUS_CONFIG = {
+  pending: {
+    color: '#C07A00',
+    bg: '#FFF4D6',
+    icon: 'time-outline',
+  },
+  in_progress: {
+    color: colors.info,
+    bg: colors.info + '18',
+    icon: 'sync-outline',
+  },
+  due_soon: {
+    color: colors.warning,
+    bg: colors.warning + '22',
+    icon: 'alarm-outline',
+  },
+  overdue: {
+    color: colors.error,
+    bg: colors.error + '18',
+    icon: 'alert-circle-outline',
+  },
+  completed: {
+    color: colors.success,
+    bg: colors.success + '18',
+    icon: 'checkmark-circle-outline',
+  },
+  none: {
+    color: colors.primary,
+    bg: colors.primaryLight,
+    icon: 'swap-horizontal-outline',
+  },
+  disputed: {
+    color: '#9c36b5',
+    bg: '#f8f0fc',
+    icon: 'warning-outline',
+  },
+};
+
+export default function ChatScreen({ navigation, route }) {
+  const { chats, addChat, updateLastMessage, markChatSeen, refreshChatExchange } = useChats();
+  const { user, profile } = useAuth();
+  const { posts } = usePosts();
+  const [input, setInput] = useState('');
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
+  const [startExchangeOpen, setStartExchangeOpen] = useState(false);
+  const [statusHistoryOpen, setStatusHistoryOpen] = useState(false);
+  const [taskSwitcherOpen, setTaskSwitcherOpen] = useState(false);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [reviewPromptConfirmOpen, setReviewPromptConfirmOpen] = useState(false);
+  const [statusReasonOpen, setStatusReasonOpen] = useState(false);
+  const [statusReasonConfig, setStatusReasonConfig] = useState({ title: '', body: '' });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [exchangeOptionsOpen, setExchangeOptionsOpen] = useState(false);
+  const [pendingInviteOpen, setPendingInviteOpen] = useState(false);
+  const [pendingInviteDismissChecked, setPendingInviteDismissChecked] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showStickyCompact, setShowStickyCompact] = useState(false);
+  const [draftExchangeType, setDraftExchangeType] = useState('borrow');
+  const [attachmentMode, setAttachmentMode] = useState('photo');
+  const [attachmentStep, setAttachmentStep] = useState('chooser');
+  const [selectedAttachmentSource, setSelectedAttachmentSource] = useState('camera');
+  const [selectedAttachmentProof, setSelectedAttachmentProof] = useState('general');
+  const [selectedLocationType, setSelectedLocationType] = useState('live');
+  const [taskOptions, setTaskOptions] = useState([]);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [selectedTaskPostId, setSelectedTaskPostId] = useState(null);
+
+  const chat = route?.params?.chat;
+  const newChatIdRef = useRef(`c_${Date.now()}`);
+  const effectiveChatId = chat?.id ?? newChatIdRef.current;
+  const isDbChatId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const [dbChatId, setDbChatId] = useState(() => isDbChatId(chat?.id) ? chat.id : null);
+  const otherUserId = chat?.user?.id ?? 'u6';
+  const otherUserName = chat?.user?.name ?? 'David M.';
+  const otherUserGender = chat?.user?.gender;
+  const fallbackPost = useMemo(() => posts.find(p =>
+    p.title === chat?.postTitle && (p.poster?.id === otherUserId || p.user_id === otherUserId)
+  ), [posts, chat?.postTitle, otherUserId]);
+  const chatPostId = chat?.postId ?? fallbackPost?.id ?? null;
+  const chatPostType = chat?.postType ?? fallbackPost?.type ?? null;
+  const chatPostOwnerId = chat?.postOwnerId ?? fallbackPost?.poster?.id ?? fallbackPost?.user_id ?? null;
+  const chatPostCategory = chat?.postCategory ?? fallbackPost?.category ?? null;
+  const activeTaskPostId = selectedTaskPostId ?? chatPostId ?? null;
+
+  useEffect(() => {
+    setDbChatId(isDbChatId(chat?.id) ? chat.id : null);
+    manualTaskSelectionRef.current = false;
+    setSelectedTaskId(null);
+    setSelectedTaskPostId(chatPostId ?? null);
+    if (isDbChatId(chat?.id)) {
+      setExchange(null);
+    }
+  }, [chat?.id, chatPostId]);
+
+  // Register a brand-new chat in the list when opening from the map
+  useEffect(() => {
+    if (!chat?.id) {
+      addChat({
+        id: effectiveChatId,
+        user: chat?.user ?? {},
+        postId: chatPostId,
+        postType: chatPostType,
+        postOwnerId: chatPostOwnerId,
+        postCategory: chatPostCategory,
+        postTitle: chat?.postTitle ?? 'New conversation',
+        lastMessage: '',
+        time: 'Just now',
+        unread: 0,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const postMeta = chat?.id && CHAT_POST_META[chat.id]
+    ? CHAT_POST_META[chat.id]
+    : {
+      title: chat?.postTitle ?? 'Original post',
+      category: 'General',
+      typeLabel: 'Post',
+      description: 'Open the original post for the full task details.',
+    };
+  const selectedTaskMeta = useMemo(() => {
+    const matchedTask = selectedTaskId
+      ? taskOptions.find(option => option.transactionId === selectedTaskId)
+      : taskOptions.find(option => (option.postId ?? null) === (activeTaskPostId ?? null));
+    if (matchedTask) {
+      return {
+        title: matchedTask.title,
+        category: matchedTask.category,
+        typeLabel: matchedTask.typeLabel,
+        description: matchedTask.description ?? postMeta.description,
+      };
+    }
+    return postMeta;
+  }, [taskOptions, activeTaskPostId, postMeta]);
+  const [messages, setMessages] = useState([]);
+
+  const formatTimelineTime = (value) => {
+    if (!value) return 'Not recorded yet';
+    return new Date(value).toLocaleString('en-AU', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const inferTransactionTypeFromCategory = (category) => {
+    switch (category) {
+      case 'Borrow an item':
+      case 'Lend an item':
+        return 'borrow';
+      case 'Physical help':
+      case 'Study / Skills':
+      case 'Study/skills':
+      case 'Offer skills':
+      case 'Pet care':
+        return 'service';
+      default:
+        return null;
+    }
+  };
+
+  const autoExchangeType = inferTransactionTypeFromCategory(chatPostCategory);
+
+  useEffect(() => {
+    if (autoExchangeType) {
+      setDraftExchangeType(autoExchangeType);
+    }
+  }, [autoExchangeType]);
+
+  const getPendingRoleFromTx = (tx, myRole) => {
+    if (!tx?.pending_by_user_id) return myRole === 'requester' ? 'requester' : 'provider';
+    if (tx.pending_by_user_id === tx.provider_id) return 'provider';
+    if (tx.pending_by_user_id === tx.requester_id) return 'requester';
+    return myRole === 'requester' ? 'requester' : 'provider';
+  };
+
+  const deriveTransactionRoles = () => {
+    const me = {
+      id: user?.id,
+      name: profile?.name ?? user?.email ?? 'You',
+      level: profile?.level ?? 1,
+      stars: profile?.stars ?? 5,
+    };
+    const them = {
+      id: otherUserId,
+      name: otherUserName,
+      level: chat?.user?.level ?? 3,
+      stars: chat?.user?.stars ?? 4.7,
+    };
+
+    if (exchange?.myRole === 'provider') {
+      return { myRole: 'provider', provider: me, requester: them };
+    }
+
+    if (exchange?.myRole === 'requester') {
+      return { myRole: 'requester', provider: them, requester: me };
+    }
+
+    if (chatPostType === 'need') {
+      if (chatPostOwnerId === user?.id) {
+        return { myRole: 'requester', provider: them, requester: me };
+      }
+      return { myRole: 'provider', provider: me, requester: them };
+    }
+
+    if (chatPostType === 'supply') {
+      if (chatPostOwnerId === user?.id) {
+        return { myRole: 'provider', provider: me, requester: them };
+      }
+      return { myRole: 'requester', provider: them, requester: me };
+    }
+
+    return { myRole: exchange?.myRole ?? 'requester', provider: them, requester: me };
+  };
+
+  // Load messages from DB and subscribe to realtime inserts
+  useEffect(() => {
+    if (!dbChatId) return;
+
+    const mapMsg = (m) => ({
+      id: m.id,
+      sender: m.sender_id === user?.id ? 'me' : 'them',
+      text: m.text,
+      time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: !!m.read_at,
+    });
+
+    fetchMessages(dbChatId).then(async rows => {
+      setMessages(rows.map(mapMsg));
+      if (user?.id) {
+        await markMessagesRead(dbChatId, user.id);
+      }
+      setTimeout(() => scrollToLatest(false), 100);
+    });
+
+    const channel = supabase
+      .channel(`chat_messages_${dbChatId}_${user?.id ?? 'guest'}_${Date.now()}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'HelpMate',
+        table: 'messages',
+        filter: `chat_id=eq.${dbChatId}`,
+      }, ({ new: m }) => {
+        setMessages(prev =>
+          prev.some(p => p.id === m.id) ? prev : [...prev, mapMsg(m)]
+        );
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [dbChatId, user?.id]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const chatId = dbChatId ?? effectiveChatId;
+      if (chatId) {
+        markChatSeen(chatId);
+        if (user?.id && isDbChatId(chatId)) {
+          markMessagesRead(chatId, user.id);
+        }
+      }
+    }, [dbChatId, effectiveChatId, markChatSeen, user?.id])
+  );
+  const [exchange, setExchange] = useState(
+    isDbChatId(chat?.id) ? null : (chat?.exchange ?? (chat?.id ? EXCHANGE_META[chat.id] ?? null : null))
+  );
+  const [showScrollUpBtn, setShowScrollUpBtn] = useState(false);
+  const [showScrollDownBtn, setShowScrollDownBtn] = useState(false);
+  const listRef = useRef(null);
+  const hasAutoScrolledRef = useRef(false);
+  const contentHeightRef = useRef(0);
+  const layoutHeightRef = useRef(0);
+  const scrollOffsetRef = useRef(0);
+  const pendingAlertedTxRef = useRef(null);
+  const dismissedPendingTxRef = useRef(new Set());
+  const manualTaskSelectionRef = useRef(false);
+  const exchangeStyle = EXCHANGE_STATUS_CONFIG[exchange?.state ?? 'none'];
+  const GENDER_ICON = { Male: '♂️', Female: '♀️', 'Non-binary': '⚧️' };
+
+  const scrollToLatest = (animated = true) => {
+    requestAnimationFrame(() => {
+      const targetOffset = Math.max(
+        contentHeightRef.current - layoutHeightRef.current,
+        0
+      );
+      listRef.current?.scrollToOffset({ offset: targetOffset, animated });
+    });
+  };
+
+  const scrollToTop = () => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+  };
+
+  const updateScrollButtons = (offsetY, contentHeight = contentHeightRef.current, layoutHeight = layoutHeightRef.current) => {
+    const distanceFromBottom = Math.max(contentHeight - layoutHeight - offsetY, 0);
+    setShowScrollUpBtn(offsetY > 120);
+    setShowScrollDownBtn(distanceFromBottom > 80);
+  };
+
+  useEffect(() => {
+    const liveChat = chats.find(c => c.id === (dbChatId ?? effectiveChatId));
+    const liveChatPostId = liveChat?.postId ?? null;
+    const currentTaskPostId = activeTaskPostId ?? null;
+
+    if (currentTaskPostId && liveChatPostId && liveChatPostId !== currentTaskPostId) {
+      return;
+    }
+    if (liveChat?.exchange) {
+      setExchange(prev => {
+        if (
+          prev?.transactionId === liveChat.exchange.transactionId &&
+          prev?.state === liveChat.exchange.state &&
+          prev?.pendingBy === liveChat.exchange.pendingBy
+        ) {
+          return prev;
+        }
+        return liveChat.exchange;
+      });
+    } else if (liveChat && liveChat.exchange === null && exchange?.transactionId) {
+      setExchange(null);
+    }
+  }, [chats, dbChatId, effectiveChatId, activeTaskPostId, exchange?.transactionId]);
+
+  useEffect(() => {
+    const chatId = dbChatId ?? effectiveChatId;
+    if (!chatId || !isDbChatId(chatId)) return;
+    const fetchSelected = selectedTaskId
+      ? fetchTransactionById(selectedTaskId)
+      : fetchTransactionByChat(chatId, activeTaskPostId);
+
+    fetchSelected.then(tx => {
+      if (!tx) {
+        setExchange(null);
+        return;
+      }
+      const myRole = tx.provider_id === user?.id ? 'provider' : 'requester';
+      setExchange({
+        transactionId: tx.id,
+        state: tx.status ?? 'pending',
+        type: tx.type ?? 'borrow',
+        myRole,
+        pendingBy: getPendingRoleFromTx(tx, myRole),
+        pendingByUserId: tx.pending_by_user_id ?? null,
+        typeLabel: (tx.type ?? 'borrow') === 'service' ? 'Help / service' : 'Borrowed item',
+        statusLabel: STATUS_LABELS[tx.status ?? 'pending'] ?? 'Pending',
+        countdownText: tx.agreed_return_date
+          ? `Return: ${new Date(tx.agreed_return_date).toLocaleDateString()}`
+          : '',
+        summaryText: tx.item ?? '',
+        actionLabel: 'View Exchange',
+        createdAt: tx.created_at ?? null,
+        handoverDate: tx.handover_date ?? null,
+        agreedReturnDate: tx.agreed_return_date ?? null,
+        completedDate: tx.completed_date ?? null,
+      });
+    });
+  }, [dbChatId, effectiveChatId, activeTaskPostId, selectedTaskId, user?.id]);
+
+  useEffect(() => {
+    const chatId = dbChatId ?? effectiveChatId;
+    if (!chatId || !isDbChatId(chatId)) {
+      setTaskOptions(chatPostId ? [{
+        id: `task_${chatPostId}`,
+        postId: chatPostId,
+        title: chat?.postTitle ?? 'Current task',
+        category: chatPostCategory ?? 'General',
+        typeLabel: chatPostType === 'need' ? 'Need' : chatPostType === 'supply' ? 'Supply' : 'Post',
+        status: exchange?.state ?? 'none',
+        statusLabel: exchange?.statusLabel ?? 'No exchange yet',
+        description: postMeta.description,
+      }] : []);
+      return;
+    }
+
+    fetchTransactionsByChat(chatId).then(rows => {
+      const mapped = rows.map((row, index) => ({
+        id: `task_tx_${row.id}`,
+        transactionId: row.id,
+        postId: row.post_id ?? `tx_${row.id}`,
+        title: row.post?.title ?? row.item ?? `Task ${index + 1}`,
+        category: row.post?.category ?? ((row.type ?? 'borrow') === 'service' ? 'Help / service' : 'Borrowed item'),
+        typeLabel: row.post?.type === 'need' ? 'Need' : row.post?.type === 'supply' ? 'Supply' : 'Post',
+        status: row.status ?? 'pending',
+        statusLabel: STATUS_LABELS[row.status ?? 'pending'] ?? 'Pending',
+        description: row.item ?? postMeta.description,
+        createdAt: row.created_at,
+      }));
+
+      if (chatPostId && !mapped.some(option => option.postId === chatPostId)) {
+        mapped.unshift({
+          id: `task_${chatPostId}`,
+          transactionId: null,
+          postId: chatPostId,
+          title: chat?.postTitle ?? 'Current task',
+          category: chatPostCategory ?? 'General',
+          typeLabel: chatPostType === 'need' ? 'Need' : chatPostType === 'supply' ? 'Supply' : 'Post',
+          status: exchange?.state ?? 'none',
+          statusLabel: exchange?.statusLabel ?? 'No exchange yet',
+          description: postMeta.description,
+          createdAt: null,
+        });
+      }
+
+      const incomingPending = rows.find(row =>
+        row.status === 'pending' &&
+        row.pending_by_user_id &&
+        row.pending_by_user_id !== user?.id
+      );
+      const latestActive = rows.find(row => ACTIVE_TASK_STATUSES.includes(row.status));
+      const preferredTask = incomingPending ?? latestActive ?? rows[0] ?? null;
+      const incomingPendingPostId = incomingPending
+        ? (incomingPending.post_id ?? `tx_${incomingPending.id}`)
+        : null;
+      const preferredTaskPostId = preferredTask
+        ? (preferredTask.post_id ?? `tx_${preferredTask.id}`)
+        : null;
+      const hasManualSelection = manualTaskSelectionRef.current;
+
+      setTaskOptions(mapped);
+      setSelectedTaskId(currentSelectedId => {
+        if (hasManualSelection && currentSelectedId && mapped.some(option => option.transactionId === currentSelectedId)) {
+          return currentSelectedId;
+        }
+        if (incomingPending?.id && mapped.some(option => option.transactionId === incomingPending.id)) {
+          return incomingPending.id;
+        }
+        if (preferredTask?.id && mapped.some(option => option.transactionId === preferredTask.id)) {
+          return preferredTask.id;
+        }
+        return null;
+      });
+      setSelectedTaskPostId(currentSelected => {
+        if (hasManualSelection && currentSelected && mapped.some(option => option.postId === currentSelected)) {
+          return currentSelected;
+        }
+        if (incomingPendingPostId && mapped.some(option => option.postId === incomingPendingPostId)) {
+          return incomingPendingPostId;
+        }
+        if (preferredTaskPostId && mapped.some(option => option.postId === preferredTaskPostId)) {
+          return preferredTaskPostId;
+        }
+        if (chatPostId && mapped.some(option => option.postId === chatPostId)) {
+          return chatPostId;
+        }
+        return mapped[0]?.postId ?? chatPostId ?? null;
+      });
+    });
+  }, [dbChatId, effectiveChatId, chatPostId, chat?.postTitle, chatPostCategory, chatPostType, exchange?.state, exchange?.statusLabel, postMeta.description, user?.id]);
+
+  const goToProfile = () => navigation.navigate('UserProfile', { userId: otherUserId });
+  const openOriginalPost = () => {
+    navigation.navigate('PostDetail', {
+      post: {
+        ...postMeta,
+        ownerName: otherUserName,
+        ownerId: otherUserId,
+        exchangeSummary: exchange
+          ? `${exchange.statusLabel} • ${exchange.countdownText}`
+          : 'No exchange yet',
+      },
+    });
+  };
+
+  const buildTimelineDates = () => {
+    const now = Date.now();
+
+    switch (exchange?.state) {
+      case 'in_progress':
+        return {
+          handoverDate: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+          agreedReturnDate: new Date(now + 12 * 60 * 60 * 1000).toISOString(),
+        };
+      case 'due_soon':
+        return {
+          handoverDate: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+          agreedReturnDate: new Date(now + 45 * 60 * 1000).toISOString(),
+        };
+      case 'overdue':
+        return {
+          handoverDate: new Date(now - 6 * 24 * 60 * 60 * 1000).toISOString(),
+          agreedReturnDate: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+      case 'completed':
+        return {
+          handoverDate: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+          agreedReturnDate: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          completedDate: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+        };
+      case 'disputed':
+        return {
+          handoverDate: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          agreedReturnDate: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          disputedDate: new Date(now - 6 * 60 * 60 * 1000).toISOString(),
+        };
+      case 'pending':
+      default:
+        return {
+          handoverDate: new Date(now).toISOString(),
+          agreedReturnDate: new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+    }
+  };
+
+  const hasSentFirst = messages.some(m => m.sender === 'me');
+  const displayMessages = useMemo(() => {
+    const lifecycle = chat?.id ? EXCHANGE_SYSTEM_MESSAGES[chat.id] ?? [] : [];
+    const mergedTimeline = mergeLifecycleIntoMessages(messages, lifecycle);
+    return [
+      { id: 'sticky_task_header', type: 'stickyTaskHeader' },
+      { id: 'scroll_exchange_intro', type: 'heroHeader' },
+      ...mergedTimeline,
+    ];
+  }, [chat?.id, messages]);
+  const statusHistory = useMemo(() => {
+    if (!exchange) return [];
+
+    const history = [
+      {
+        id: `timeline_pending_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Pending',
+        time: formatTimelineTime(exchange.createdAt),
+        body: 'A start request was created for this task and is waiting for the other side to respond.',
+        icon: 'swap-horizontal-outline',
+      },
+    ];
+
+    if (['in_progress', 'due_soon', 'overdue', 'completed', 'disputed'].includes(exchange.state)) {
+      history.push({
+        id: `timeline_started_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Started',
+        time: formatTimelineTime(exchange.handoverDate ?? exchange.createdAt),
+        body: 'The other side accepted the request and this specific exchange moved into progress.',
+        icon: 'sync-outline',
+      });
+    }
+
+    if (exchange.state === 'overdue') {
+      history.push({
+        id: `timeline_overdue_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Overdue',
+        time: formatTimelineTime(exchange.agreedReturnDate),
+        body: 'The agreed deadline passed before this task was marked complete.',
+        icon: 'alert-circle-outline',
+      });
+    }
+
+    if (exchange.state === 'completed') {
+      history.push({
+        id: `timeline_completed_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Completed',
+        time: formatTimelineTime(exchange.completedDate),
+        body: 'Only this selected task was marked completed, so reviews can now be submitted for this transaction.',
+        icon: 'checkmark-circle-outline',
+      });
+    }
+
+    if (exchange.state === 'disputed') {
+      history.push({
+        id: `timeline_disputed_${exchange.transactionId ?? activeTaskPostId ?? 'none'}`,
+        title: 'Disputed',
+        time: formatTimelineTime(exchange.completedDate ?? exchange.agreedReturnDate ?? exchange.handoverDate ?? exchange.createdAt),
+        body: 'This selected task is currently under dispute.',
+        icon: 'warning-outline',
+      });
+    }
+
+    return history;
+  }, [exchange, activeTaskPostId]);
+
+  const buildTransactionPayload = () => ({
+    ...buildTimelineDates(),
+    id: `t_${Date.now()}`,
+    chatId: effectiveChatId ?? dbChatId ?? null,
+    status: exchange?.state === 'due_soon' ? 'in_progress' : exchange?.state ?? 'pending',
+    type: exchange?.type ?? 'borrow',
+    postTitle: chat?.postTitle ?? 'Exchange',
+    item: chat?.postTitle ?? 'Item',
+    provider: deriveTransactionRoles().provider,
+    requester: deriveTransactionRoles().requester,
+    myRole: deriveTransactionRoles().myRole,
+    pendingBy: exchange?.pendingBy ?? null,
+    notes: exchange?.type === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
+  });
+
+  const openTransaction = async () => {
+    const txId = exchange?.transactionId;
+    if (txId) {
+      const tx = await fetchTransactionById(txId);
+      if (tx) {
+        const myRole = tx.provider_id === user?.id ? 'provider' : 'requester';
+        navigation.navigate('Transaction', {
+          fromChat: true,
+          transaction: {
+            id: tx.id,
+            chatId: tx.chat_id ?? effectiveChatId ?? null,
+            status: tx.status,
+            type: tx.type ?? 'borrow',
+            postTitle: selectedTaskMeta.title ?? chat?.postTitle ?? 'Exchange',
+            item: tx.item ?? selectedTaskMeta.title ?? chat?.postTitle ?? 'Item',
+            provider: tx.provider ?? { id: tx.provider_id, name: otherUserName },
+            requester: tx.requester ?? { id: tx.requester_id, name: 'Unknown' },
+            myRole,
+            pendingBy: getPendingRoleFromTx(tx, myRole),
+            handoverDate: tx.handover_date ?? new Date().toISOString(),
+            agreedReturnDate: tx.agreed_return_date ?? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+            notes: 'Agreed return and handover via chat.',
+          },
+        });
+        return;
+      }
+    }
+    navigation.navigate('Transaction', { fromChat: true, transaction: buildTransactionPayload() });
+  };
+
+  const addSystemEvent = (title, body, icon = 'information-circle-outline') => {
+    const event = {
+      id: `sys_dynamic_${Date.now()}`,
+      type: 'system',
+      icon,
+      title,
+      body,
+      time: new Date().toLocaleString('en-AU', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    };
+    setMessages(prev => [...prev, event]);
+  };
+
+  const acceptExchangeInChat = () => {
+    if (!exchange) return;
+    const startedAt = new Date().toISOString();
+    setExchange(prev => ({
+      ...prev,
+      state: 'in_progress',
+      pendingBy: null,
+      statusLabel: 'In Progress',
+      countdownText: prev.type === 'service' ? 'Task window is now active' : 'Return countdown is now active',
+      summaryText: prev.type === 'service'
+        ? 'The exchange is active until the supplier marks the task completed'
+        : 'The exchange is active until the supplier confirms completion',
+      handoverDate: startedAt,
+    }));
+    if (exchange.transactionId) {
+      updateTransaction(exchange.transactionId, {
+        status: 'in_progress',
+        pending_by_user_id: null,
+        handover_date: startedAt,
+      }).then(() =>
+        refreshChatExchange(dbChatId, activeTaskPostId)
+      );
+    }
+    addSystemEvent(
+      'Started',
+      exchange.type === 'service'
+        ? 'The start request was accepted and this help task is now in progress.'
+        : 'The start request was accepted and this borrowed-item exchange is now in progress.',
+      'sync-outline'
+    );
+  };
+
+  const withdrawPendingExchangeInChat = () => {
+    if (!effectiveChatId || exchange?.state !== 'pending' || exchange?.pendingBy !== exchange?.myRole || !user?.id) return;
+
+    Alert.alert(
+      'Withdraw Start Request',
+      'This will cancel the current pending request so you can send a new start request later.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'destructive',
+          onPress: async () => {
+            const removed = await deletePendingTransactionsByChat(effectiveChatId, user.id);
+            if (!removed) {
+              Alert.alert('Unable to withdraw', 'The pending request could not be removed. Please check the database policy and try again.');
+              return;
+            }
+            setExchange(null);
+            addSystemEvent(
+              'Pending withdrawn',
+              'The start request was withdrawn before the other side accepted it.',
+              'close-circle-outline'
+            );
+            refreshChatExchange(effectiveChatId, activeTaskPostId);
+          },
+        },
+      ]
+    );
+  };
+
+  const refusePendingExchangeInChat = () => {
+    if (!exchange || exchange.state !== 'pending' || !canAcceptExchange || !exchange.transactionId) return;
+
+    Alert.alert(
+      'Refuse Start Request',
+      'This will refuse the current pending request and keep this task in the not-started state.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Refuse',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const pendingTx = await fetchTransactionById(exchange.transactionId);
+              const removed = await deletePendingTransactionById(exchange.transactionId);
+              if (!removed) {
+                Alert.alert('Unable to refuse', 'The pending request could not be removed. Please check the database policy and try again.');
+                return;
+              }
+
+              const senderId =
+                pendingTx?.pending_by_user_id ??
+                exchange.pendingByUserId ??
+                otherUserId;
+              if (senderId && senderId !== user?.id) {
+                const notificationResult = await createNotification({
+                  userId: senderId,
+                  type: 'exchange_refused',
+                  title: 'Start request refused',
+                  body: `${profile?.name ?? 'Someone'} refused your start request for "${selectedTaskMeta.title ?? 'this task'}".`,
+                  actorId: user?.id ?? null,
+                  referenceId: effectiveChatId,
+                  referenceType: 'chat',
+                });
+                if (!notificationResult?.ok) {
+                  console.warn('exchange_refused notification not created', {
+                    transactionId: exchange.transactionId,
+                    senderId,
+                    pendingByUserId: pendingTx?.pending_by_user_id ?? null,
+                    currentUserId: user?.id ?? null,
+                    effectiveChatId,
+                    errorMessage: notificationResult?.errorMessage ?? null,
+                  });
+                  Alert.alert(
+                    'Notification Debug',
+                    `senderId: ${senderId}\npendingByUserId: ${pendingTx?.pending_by_user_id ?? 'null'}\ncurrentUserId: ${user?.id ?? 'null'}\nerror: ${notificationResult?.errorMessage ?? 'unknown'}`
+                  );
+                }
+              }
+
+              const remainingTasks = effectiveChatId
+                ? await fetchTransactionsByChat(effectiveChatId)
+                : [];
+              const fallbackTask = remainingTasks.find(task =>
+                ['pending', 'in_progress', 'overdue', 'disputed'].includes(task.status)
+              ) ?? remainingTasks[0] ?? null;
+
+              let fallbackExchange = null;
+              if (fallbackTask) {
+                const fallbackRole = fallbackTask.provider_id === user?.id ? 'provider' : 'requester';
+                fallbackExchange = {
+                  transactionId: fallbackTask.id,
+                  state: fallbackTask.status ?? 'pending',
+                  type: fallbackTask.type ?? 'borrow',
+                  myRole: fallbackRole,
+                  pendingBy: getPendingRoleFromTx(fallbackTask, fallbackRole),
+                  pendingByUserId: fallbackTask.pending_by_user_id ?? null,
+                  typeLabel: (fallbackTask.type ?? 'borrow') === 'service' ? 'Help / service' : 'Borrowed item',
+                  statusLabel: STATUS_LABELS[fallbackTask.status ?? 'pending'] ?? 'Pending',
+                  countdownText: fallbackTask.agreed_return_date
+                    ? `Return: ${new Date(fallbackTask.agreed_return_date).toLocaleDateString()}`
+                    : '',
+                  summaryText: fallbackTask.item ?? '',
+                  actionLabel: 'View Exchange',
+                  createdAt: fallbackTask.created_at ?? null,
+                  handoverDate: fallbackTask.handover_date ?? null,
+                  agreedReturnDate: fallbackTask.agreed_return_date ?? null,
+                  completedDate: fallbackTask.completed_date ?? null,
+                };
+              }
+
+              setPendingInviteOpen(false);
+              manualTaskSelectionRef.current = false;
+              setExchange(fallbackExchange);
+              setSelectedTaskId(fallbackTask?.id ?? null);
+              setSelectedTaskPostId(
+                fallbackTask
+                  ? (fallbackTask.post_id ?? `tx_${fallbackTask.id}`)
+                  : null
+              );
+              addSystemEvent(
+                'Request refused',
+                'The pending start request was refused before the exchange could begin.',
+                'close-circle-outline'
+              );
+              refreshChatExchange(
+                effectiveChatId,
+                fallbackTask?.post_id ?? null
+              );
+            } catch (error) {
+              console.error('refusePendingExchangeInChat:', error?.message ?? error);
+              Alert.alert('Unable to refuse', 'Something went wrong while refusing this request.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const completeExchangeInChat = () => {
+    if (!exchange) return;
+    setCompleteConfirmOpen(true);
+  };
+
+  const confirmCompleteExchangeInChat = () => {
+    if (!exchange) return;
+
+    setExchange(prev => ({
+      ...prev,
+      state: 'completed',
+      pendingBy: null,
+      statusLabel: 'Completed',
+      countdownText: 'Review prompt unlocked',
+      summaryText: 'This exchange is complete. You can now leave a review.',
+      completedDate: new Date().toISOString(),
+    }));
+    addSystemEvent(
+      'Exchange completed',
+      exchange.type === 'service'
+        ? 'The supplier marked the task completed. You can now leave a review.'
+        : 'The supplier marked the exchange completed after the item return. You can now leave a review.',
+      'checkmark-circle-outline'
+    );
+    setCompleteConfirmOpen(false);
+    setReviewPromptConfirmOpen(true);
+    if (exchange.transactionId) {
+      updateTransactionStatus(exchange.transactionId, 'completed').then(() =>
+        refreshChatExchange(dbChatId, activeTaskPostId)
+      );
+    }
+  };
+
+  const openReviewPromptInTransaction = () => {
+    const completedTransaction = {
+      ...buildTransactionPayload(),
+      status: 'completed',
+      completedDate: new Date().toISOString(),
+    };
+
+    setReviewPromptConfirmOpen(false);
+    navigation.navigate('Transaction', {
+      fromChat: true,
+      transaction: completedTransaction,
+      focusReviewPrompt: true,
+    });
+  };
+
+  const openCompletedReviewInTransaction = () => {
+    navigation.navigate('Transaction', {
+      fromChat: true,
+      transaction: {
+        ...buildTransactionPayload(),
+        status: 'completed',
+        completedDate: new Date().toISOString(),
+      },
+      focusReviewPrompt: true,
+    });
+  };
+
+  const openStatusReasonPopup = (reasonType) => {
+    if (!exchange) return;
+
+    if (reasonType === 'dispute') {
+      setStatusReasonConfig({
+        title: 'Dispute Reason',
+        body: exchange.type === 'service'
+          ? 'This exchange is under dispute because one side reported the task outcome is still unresolved. Penalties are paused while both sides review what happened.'
+          : 'This exchange is under dispute because the borrowed-item return could not be fully verified. Penalties are paused while both sides review the return details.',
+      });
+      setStatusReasonOpen(true);
+      return;
+    }
+
+    setStatusReasonConfig({
+      title: 'Overdue Reason',
+      body: exchange.type === 'service'
+        ? 'This help task has passed its agreed time window without final completion, so it is now marked overdue until the exchange is resolved.'
+        : exchange.myRole === 'provider'
+          ? 'This borrowed-item exchange is overdue because the return deadline passed before the final completion was confirmed.'
+          : 'This borrowed-item exchange is overdue because the return deadline passed without final confirmation. Restrictions may apply until the supplier resolves it.',
+    });
+    setStatusReasonOpen(true);
+  };
+
+  const startExchange = async () => {
+    const selectedExchangeType = autoExchangeType ?? draftExchangeType;
+    const roles = deriveTransactionRoles();
+    const nextExchange = {
+      state: 'pending',
+      type: selectedExchangeType,
+      myRole: roles.myRole,
+      pendingBy: roles.myRole,
+      typeLabel: selectedExchangeType === 'service' ? 'Help / service' : 'Borrowed item',
+      statusLabel: 'Pending',
+      countdownText: 'Waiting for the other side to accept the start request',
+      summaryText: 'A start request has been sent and this exchange is waiting for acceptance',
+      actionLabel: 'View Exchange',
+    };
+
+    addSystemEvent(
+      'Pending',
+      'A start request was sent. This exchange is now waiting for the other side to accept.',
+      'swap-horizontal-outline'
+    );
+    setStartExchangeOpen(false);
+
+    const agreedReturnDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    let transactionChatId = effectiveChatId;
+
+    if (!isDbChatId(transactionChatId) && user?.id && chat?.user?.id) {
+      const savedChat = await createChatWithPost(user.id, chat.user.id, chatPostId);
+      if (savedChat?.id) {
+        transactionChatId = savedChat.id;
+        setDbChatId(savedChat.id);
+        addChat({
+          id: savedChat.id,
+          user: chat?.user ?? {},
+          postId: chatPostId,
+          postType: chatPostType,
+          postOwnerId: chatPostOwnerId,
+          postCategory: chatPostCategory,
+          postTitle: chat?.postTitle ?? 'New conversation',
+          lastMessage: '',
+          time: 'Just now',
+          unread: 0,
+          exchange: null,
+        });
+      }
+    }
+
+    // Save to DB if this is a real chat
+    let savedTx = null;
+    if (user?.id && isDbChatId(transactionChatId)) {
+      savedTx = await createTransaction({
+        post_id: chatPostId,
+        requester_id: roles.requester.id,
+        provider_id: roles.provider.id,
+        pending_by_user_id: user.id,
+        type: selectedExchangeType,
+        item: chat?.postTitle ?? 'Item',
+        status: 'pending',
+        chat_id: transactionChatId,
+        agreed_return_date: agreedReturnDate,
+      });
+    }
+
+    setExchange({ ...nextExchange, transactionId: savedTx?.id ?? null });
+    if (savedTx?.id) refreshChatExchange(transactionChatId, chatPostId);
+
+    navigation.navigate('Transaction', {
+      fromChat: true,
+      transaction: {
+        id: savedTx?.id ?? `t_${Date.now()}`,
+        chatId: transactionChatId ?? null,
+        status: 'pending',
+        type: selectedExchangeType,
+        postTitle: chat?.postTitle ?? 'Exchange',
+        item: chat?.postTitle ?? 'Item',
+        provider: roles.provider,
+        requester: roles.requester,
+        myRole: roles.myRole,
+        pendingBy: roles.myRole,
+        handoverDate: new Date().toISOString(),
+        agreedReturnDate,
+        notes: selectedExchangeType === 'service' ? 'Agreed service window via chat.' : 'Agreed return and handover via chat.',
+      },
+    });
+  };
+
+  const canAcceptExchange = Boolean(exchange?.pendingBy && exchange.pendingBy !== exchange?.myRole);
+  const previewRoles = deriveTransactionRoles();
+
+  useEffect(() => {
+    if (!exchange || exchange.state !== 'pending' || !canAcceptExchange || !exchange.transactionId) return;
+    if (pendingAlertedTxRef.current === exchange.transactionId) return;
+    if (dismissedPendingTxRef.current.has(exchange.transactionId)) return;
+    pendingAlertedTxRef.current = exchange.transactionId;
+    setPendingInviteDismissChecked(false);
+    setPendingInviteOpen(true);
+  }, [exchange?.transactionId, exchange?.state, canAcceptExchange, otherUserName]);
+
+  const exchangeActionConfig = !exchange
+    ? {
+      title: 'Ready to start',
+      body: 'Once both sides agree, send a start request to move this task into pending.',
+      primaryLabel: 'Send Start',
+      secondaryLabel: 'More',
+      onPrimary: () => setStartExchangeOpen(true),
+      onSecondary: openOriginalPost,
+      primaryTone: 'primary',
+    }
+      : exchange.state === 'pending'
+      ? {
+        title: 'Pending',
+        body: canAcceptExchange
+          ? 'A start request is waiting for your acceptance. Accepting will move the exchange into progress.'
+          : 'You sent a start request and can still withdraw it before the other side accepts.',
+        primaryLabel: canAcceptExchange ? 'Accept' : 'Withdraw Pending',
+        secondaryLabel: 'View Transaction',
+        onPrimary: canAcceptExchange ? acceptExchangeInChat : withdrawPendingExchangeInChat,
+        onSecondary: openTransaction,
+          primaryTone: canAcceptExchange ? 'primary' : 'danger',
+        }
+      : exchange.state === 'in_progress' || exchange.state === 'due_soon'
+        ? {
+          title: 'In Progress',
+          body: exchange.myRole === 'provider'
+            ? (exchange.type === 'service'
+              ? 'Mark the task completed when the session is done.'
+              : 'Mark the exchange completed once the item has been returned.')
+            : 'The exchange is active. Keep coordinating here until the supplier completes it.',
+          primaryLabel: exchange.myRole === 'provider'
+            ? 'Complete'
+            : 'In Progress',
+          secondaryLabel: 'View Transaction',
+          onPrimary: exchange.myRole === 'provider' ? completeExchangeInChat : openTransaction,
+          onSecondary: openTransaction,
+          primaryTone: exchange.myRole === 'provider' ? 'primary' : 'muted',
+        }
+        : exchange.state === 'overdue'
+          ? {
+            title: 'Overdue',
+            body: exchange.myRole === 'provider'
+              ? 'Open the exchange to confirm the return or resolve the overdue state.'
+              : 'This exchange is overdue. Open the transaction to review the restriction details.',
+            primaryLabel: exchange.myRole === 'provider'
+              ? 'Complete'
+              : 'View Overdue',
+            secondaryLabel: null,
+            onPrimary: exchange.myRole === 'provider' ? completeExchangeInChat : openTransaction,
+            onSecondary: null,
+            primaryTone: exchange.myRole === 'provider' ? 'primary' : 'danger',
+          }
+          : exchange.state === 'completed'
+            ? {
+              title: 'Completed',
+              body: 'This exchange is finished. You can leave a review and it will appear on the user profile.',
+              primaryLabel: 'Leave Review',
+              secondaryLabel: 'View Transaction',
+              onPrimary: openTransaction,
+              onSecondary: openTransaction,
+              primaryTone: 'success',
+            }
+            : {
+              title: 'Disputed',
+              body: 'This exchange is paused for review. Open the transaction to see the dispute details.',
+              primaryLabel: 'View Dispute',
+              secondaryLabel: null,
+              onPrimary: openTransaction,
+              onSecondary: null,
+              primaryTone: 'danger',
+            };
+
+  const exchangeQuickActions = !exchange
+    ? [
+      {
+        id: 'send_start',
+        label: 'Send Start',
+        helper: 'Send a start request to move the task into pending.',
+        onPress: () => setStartExchangeOpen(true),
+      },
+      {
+        id: 'more',
+        label: 'More',
+        helper: 'Open the original post details.',
+        onPress: openOriginalPost,
+      },
+    ]
+    : [
+      ...(!['pending', 'in_progress', 'due_soon', 'overdue', 'completed', 'disputed'].includes(exchange.state)
+        ? [{
+          id: 'state',
+          label: exchangeActionConfig.title,
+          helper: exchangeActionConfig.body,
+          onPress: exchangeActionConfig.onPrimary,
+        }]
+        : []),
+      ...(exchange.state === 'pending'
+        ? (canAcceptExchange
+          ? []
+          : (exchange.pendingBy === exchange.myRole
+            ? [{
+              id: 'withdraw_pending',
+              label: 'Withdraw Pending',
+              helper: 'Cancel this pending start request so you can send a new one later.',
+              onPress: withdrawPendingExchangeInChat,
+            }]
+            : []))
+        : []),
+      ...((exchange.state === 'in_progress' || exchange.state === 'due_soon')
+        ? (exchange.myRole === 'provider'
+          ? [{
+            id: 'complete',
+            label: 'Complete',
+            helper: 'Confirm that the task is done or the item has been returned.',
+            onPress: completeExchangeInChat,
+          }]
+          : [])
+        : []),
+      ...(exchange.state === 'completed'
+        ? [{
+          id: 'review',
+          label: 'Leave Review',
+          helper: 'Add feedback that will also appear on the user profile.',
+          onPress: openCompletedReviewInTransaction,
+        }]
+        : []),
+      ...(exchange.state === 'disputed'
+        ? [{
+          id: 'dispute',
+          label: 'View Dispute',
+          helper: 'See the current dispute and paused penalties.',
+          onPress: () => openStatusReasonPopup('dispute'),
+        }]
+        : []),
+      ...(exchange.state === 'overdue'
+        ? [{
+          id: 'overdue',
+          label: 'View Overdue',
+          helper: 'See why this exchange is currently overdue.',
+          onPress: () => openStatusReasonPopup('overdue'),
+        }]
+        : []),
+      {
+        id: 'transaction',
+        label: 'View Transaction',
+        helper: 'Open the full exchange detail screen.',
+        onPress: openTransaction,
+      },
+    ];
+
+  const handleExchangeQuickAction = (action) => {
+    setExchangeOptionsOpen(false);
+    setTimeout(() => action.onPress?.(), 120);
+  };
+
+  const send = async () => {
+    if (!input.trim()) return;
+    const text = input.trim();
+    const newMsg = {
+      id: `m${Date.now()}`,
+      sender: 'me',
+      text,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: false,
+    };
+    setMessages(prev => [...prev, newMsg]);
+    setInput('');
+    setTimeout(() => scrollToLatest(true), 60);
+    setTimeout(() => scrollToLatest(false), 180);
+
+    if (!user?.id) return;
+
+    let chatId = dbChatId;
+    // First message in a new chat — create the chat record in DB
+    if (!chatId && chat?.user?.id) {
+      const saved = await createChatWithPost(user.id, chat.user.id, chatPostId);
+      if (saved?.id) {
+        chatId = saved.id;
+        setDbChatId(chatId);
+      }
+    }
+
+    if (chatId) {
+      updateLastMessage(chatId, text, newMsg.time);
+      dbSendMessage(chatId, user.id, text);
+    }
+  };
+
+  useEffect(() => {
+    hasAutoScrolledRef.current = false;
+    setShowScrollUpBtn(false);
+    setShowScrollDownBtn(false);
+  }, [chat?.id]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const chatId = dbChatId ?? effectiveChatId;
+      if (chatId) {
+        refreshChatExchange(chatId, chatPostId);
+      }
+      const t1 = setTimeout(() => scrollToLatest(false), 80);
+      const t2 = setTimeout(() => scrollToLatest(false), 220);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }, [dbChatId, effectiveChatId, refreshChatExchange, chatPostId])
+  );
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const didShowEvent = 'keyboardDidShow';
+    return () => {};
+  }, []);
+
+  const attachmentDetailPanResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, gestureState) =>
+      attachmentStep === 'details'
+      && gestureState.dx > 10
+      && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.2,
+    onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+      attachmentStep === 'details'
+      && gestureState.dx > 10
+      && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.2,
+    onPanResponderTerminationRequest: () => true,
+    onShouldBlockNativeResponder: () => false,
+    onPanResponderRelease: (_, gestureState) => {
+      if (
+        attachmentStep === 'details'
+        && gestureState.dx > 40
+        && Math.abs(gestureState.dy) < 36
+      ) {
+        setAttachmentStep('chooser');
+      }
+    },
+  }), [attachmentStep]);
+
+  const sendAttachment = () => {
+    if (attachmentMode === 'location') {
+      const locationLabel = LOCATION_SHARE_OPTIONS.find(option => option.id === selectedLocationType)?.label ?? 'Live location';
+      const newLocation = {
+        id: `l${Date.now()}`,
+        type: 'location',
+        sender: 'me',
+        locationLabel,
+        text: locationLabel === 'Live location'
+          ? 'Sharing my live location so we can meet more easily.'
+          : locationLabel === 'Meet-up spot'
+            ? 'Shared a meet-up spot for this exchange.'
+            : 'Shared an on-site update from the current location.',
+        place: locationLabel === 'Meet-up spot' ? 'Lygon St front entrance' : 'Current nearby position',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        read: false,
+      };
+
+      setMessages(prev => [...prev, newLocation]);
+      setAttachmentOpen(false);
+      setAttachmentStep('chooser');
+      setAttachmentMode('photo');
+      setSelectedLocationType('live');
+      return;
+    }
+
+    const proofLabel = ATTACHMENT_PROOF_OPTIONS.find(option => option.id === selectedAttachmentProof)?.label ?? 'General photo';
+    const sourceLabel = selectedAttachmentSource === 'camera' ? 'Taken with camera' : 'Chosen from library';
+
+    const newAttachment = {
+      id: `a${Date.now()}`,
+      type: 'attachment',
+      sender: 'me',
+      proofLabel,
+      sourceLabel,
+      text: `${proofLabel} attached`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: false,
+    };
+
+    setMessages(prev => [...prev, newAttachment]);
+    setAttachmentOpen(false);
+    setAttachmentStep('chooser');
+    setAttachmentMode('photo');
+    setSelectedAttachmentSource('camera');
+    setSelectedAttachmentProof('general');
+    setSelectedLocationType('live');
+  };
+
+  const toggleMute = () => {
+    setMenuOpen(false);
+    setIsMuted(prev => !prev);
+  };
+
+  const reportUser = () => {
+    setMenuOpen(false);
+    Alert.alert(
+      'Report User',
+      `Report ${otherUserName} for inappropriate behaviour or a safety issue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: () => Alert.alert('Report sent', 'Thanks. This user has been flagged for review.'),
+        },
+      ]
+    );
+  };
+
+  const blockUser = () => {
+    setMenuOpen(false);
+    Alert.alert(
+      'Block User',
+      `Block ${otherUserName}? You will no longer receive messages from this chat.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: () => Alert.alert('User blocked', `${otherUserName} has been blocked from contacting you.`),
+        },
+      ]
+    );
+  };
+
+  const renderPersistentStatusBubble = () => (
+    <View style={styles.stickyHeaderShell}>
+      <TouchableOpacity
+        activeOpacity={0.92}
+        style={styles.stickyHeaderCard}
+        onPress={() => exchange && setStatusHistoryOpen(true)}
+      >
+        <View style={styles.stickyHeaderMain}>
+          <View style={[styles.stickyIconWrap, { backgroundColor: exchangeStyle.bg }]}>
+            <Ionicons name={exchangeStyle.icon} size={15} color={exchangeStyle.color} />
+          </View>
+          <View style={styles.stickyTextWrap}>
+            <Text style={styles.stickyTitle}>
+              {exchange ? `${exchange.statusLabel} • ${exchange.typeLabel}` : 'No exchange yet'}
+            </Text>
+            <Text style={styles.stickySubtitle} numberOfLines={1}>
+              {exchange ? exchange.countdownText : selectedTaskMeta.title ?? chat?.postTitle ?? 'Start an exchange when both sides are ready'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.stickyRightActions}>
+          <TouchableOpacity
+            style={styles.stickyMiniBtn}
+            onPress={() => setTaskSwitcherOpen(true)}
+          >
+            <Ionicons name="albums-outline" size={15} color={colors.primary} />
+          </TouchableOpacity>
+          {exchange && <Ionicons name="time-outline" size={16} color={colors.textMuted} />}
+          <TouchableOpacity
+            style={styles.stickyActionBtn}
+            onPress={exchange ? openTransaction : () => setStartExchangeOpen(true)}
+          >
+            <Text style={styles.stickyActionText}>{exchange ? 'View' : 'Start'}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderMessage = ({ item }) => {
+    if (item.type === 'stickyTaskHeader') {
+      if (!showStickyCompact) return <View style={styles.stickyTaskPlaceholder} />;
+
+      return (
+        <View style={styles.stickyTaskShell}>
+          <TouchableOpacity
+            activeOpacity={0.92}
+            style={styles.stickyTaskCard}
+            onPress={openOriginalPost}
+          >
+            <View style={styles.stickyTaskMain}>
+              <View style={styles.stickyTaskTypeChip}>
+                <Text style={styles.stickyTaskTypeText}>{postMeta.typeLabel}</Text>
+              </View>
+              <View style={styles.stickyTaskTextWrap}>
+                <Text style={styles.stickyTaskTitle} numberOfLines={1}>{postMeta.title}</Text>
+                <Text style={styles.stickyTaskSubtitle} numberOfLines={1}>{postMeta.category}</Text>
+              </View>
+            </View>
+            <Text style={styles.stickyTaskMore}>More</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (item.type === 'heroHeader') {
+      return (
+        <>
+          {exchange?.state === 'completed' && (
+            <View style={styles.topStateCard}>
+              <Ionicons name="star-outline" size={18} color={colors.success} />
+              <View style={styles.topStateCopy}>
+                <Text style={styles.topStateTitle}>Review ready</Text>
+                <Text style={styles.topStateBody}>This exchange is complete. Leave a quick review while the details are still fresh.</Text>
+              </View>
+            </View>
+          )}
+
+          {exchange?.state === 'disputed' && (
+            <View style={[styles.topStateCard, styles.topStateCardDispute]}>
+              <Ionicons name="warning-outline" size={18} color="#9c36b5" />
+              <View style={styles.topStateCopy}>
+                <Text style={[styles.topStateTitle, { color: '#7b2cbf' }]}>Dispute active</Text>
+                <Text style={styles.topStateBody}>This exchange is paused for review. Keep chatting here to clarify details while penalties stay paused.</Text>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.pinnedArea}>
+            <TouchableOpacity style={styles.taskCard} activeOpacity={0.9} onPress={openOriginalPost}>
+              <View style={styles.taskCardTop}>
+                <View style={styles.taskTypeChip}>
+                  <Text style={styles.taskTypeChipText}>{selectedTaskMeta.typeLabel}</Text>
+                </View>
+                <Ionicons name="open-outline" size={18} color={colors.primary} />
+              </View>
+
+              <Text style={styles.taskTitle}>{selectedTaskMeta.title}</Text>
+
+              <View style={styles.taskMetaRow}>
+                <View style={styles.taskMetaChip}>
+                  <Text style={styles.taskMetaChipText}>{selectedTaskMeta.category}</Text>
+                </View>
+                <View style={styles.taskMetaChip}>
+                  <Text style={styles.taskMetaChipText}>
+                    {exchange ? `${exchange.statusLabel} • ${exchange.typeLabel}` : 'No exchange yet'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.taskDescription} numberOfLines={2}>
+                {selectedTaskMeta.description}
+              </Text>
+
+              <View style={styles.taskFooter}>
+                <Text style={styles.taskFooterText}>
+                  {exchange ? exchange.countdownText : 'Open the original post to review the task details'}
+                </Text>
+                <Text style={styles.taskFooterLink}>More</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.exchangeActionCard}>
+              <View style={styles.exchangeActionCopy}>
+                <Text style={styles.exchangeActionTitle}>{exchangeActionConfig.title}</Text>
+                <Text style={styles.exchangeActionBody}>{exchangeActionConfig.body}</Text>
+              </View>
+              <Text style={styles.exchangeActionHint}>
+                Tap the small button to choose actions like pending, start, complete, or review.
+              </Text>
+            </View>
+          </View>
+
+          {!hasSentFirst && (
+            <View style={styles.gateNotice}>
+              <Text style={styles.gateText}>
+                Send your first message to start the conversation. {otherUserName} will reply when available.
+              </Text>
+            </View>
+          )}
+        </>
+      );
+    }
+
+    if (item.type === 'system') {
+      return (
+        <View style={styles.systemMessageWrap}>
+          <View style={styles.systemMessageCard}>
+            <View style={styles.systemMessageHeader}>
+              <View style={styles.systemIconWrap}>
+                <Ionicons name={item.icon} size={14} color={colors.primary} />
+              </View>
+              <View style={styles.systemHeaderText}>
+                <Text style={styles.systemTitle}>{item.title}</Text>
+                <Text style={styles.systemTime}>{item.time}</Text>
+              </View>
+            </View>
+            <Text style={styles.systemBody}>{item.body}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    const isMe = item.sender === 'me';
+    if (item.type === 'attachment') {
+      return (
+        <View style={[styles.msgRow, styles.msgRowMe]}>
+          <View style={[styles.bubble, styles.bubbleMe, styles.attachmentBubble]}>
+            <View style={styles.attachmentTopRow}>
+              <Ionicons name="image-outline" size={16} color={colors.textWhite} />
+              <Text style={styles.attachmentTitle}>{item.proofLabel}</Text>
+            </View>
+            <Text style={styles.attachmentMeta}>{item.sourceLabel}</Text>
+            <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.text}</Text>
+            <View style={styles.bubbleMeta}>
+              <Text style={[styles.bubbleTime, styles.bubbleTimeMe]}>{item.time}</Text>
+              <Text style={[styles.readTick, item.read && styles.readTickRead]}>
+                {item.read ? '✓✓' : '✓'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    if (item.type === 'location') {
+      return (
+        <View style={[styles.msgRow, styles.msgRowMe]}>
+          <View style={[styles.bubble, styles.bubbleMe, styles.locationBubble]}>
+            <View style={styles.attachmentTopRow}>
+              <Ionicons name="location-outline" size={16} color={colors.textWhite} />
+              <Text style={styles.attachmentTitle}>{item.locationLabel}</Text>
+            </View>
+            <Text style={styles.attachmentMeta}>{item.place}</Text>
+            <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.text}</Text>
+            <View style={styles.locationMapPreview}>
+              <Ionicons name="navigate-circle-outline" size={18} color={colors.textWhite} />
+              <Text style={styles.locationMapText}>Location preview</Text>
+            </View>
+            <View style={styles.bubbleMeta}>
+              <Text style={[styles.bubbleTime, styles.bubbleTimeMe]}>{item.time}</Text>
+              <Text style={[styles.readTick, item.read && styles.readTickRead]}>
+                {item.read ? '✓✓' : '✓'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
+        {!isMe && (
+          <TouchableOpacity onPress={goToProfile}>
+            <Avatar name={otherUserName} size={32} level={3} showBadge={false} style={styles.msgAvatar} />
+          </TouchableOpacity>
+        )}
+        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+          <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.text}</Text>
+          <View style={styles.bubbleMeta}>
+            <Text style={[styles.bubbleTime, isMe && styles.bubbleTimeMe]}>{item.time}</Text>
+            {isMe && (
+              <Text style={[styles.readTick, item.read && styles.readTickRead]}>
+                {item.read ? '✓✓' : '✓'}
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.backIcon}>←</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerUser} onPress={goToProfile}>
+            <Avatar name={otherUserName} size={40} level={3} />
+            <View style={styles.headerUserText}>
+              <View style={styles.nameRow}>
+                <Text style={styles.headerName}>{otherUserName}</Text>
+                <Text style={styles.onlineIndicator}>● online</Text>
+              </View>
+              <Text style={styles.headerSub}>
+                ⭐ 4.7 · Fitzroy{otherUserGender ? ` · ${GENDER_ICON[otherUserGender]} ${otherUserGender}` : ''}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setMenuOpen(true)}>
+            <Text style={styles.moreIcon}>⋮</Text>
+          </TouchableOpacity>
+        </View>
+
+        {renderPersistentStatusBubble()}
+
+        <FlatList
+          ref={listRef}
+          data={displayMessages}
+          keyExtractor={item => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.messageList}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          scrollEnabled
+          showsVerticalScrollIndicator
+          persistentScrollbar
+          stickyHeaderIndices={[0]}
+          onScroll={(event) => {
+            const offsetY = event.nativeEvent.contentOffset.y;
+            scrollOffsetRef.current = offsetY;
+            setShowStickyCompact(offsetY > 140);
+            updateScrollButtons(offsetY);
+          }}
+          onLayout={(event) => {
+            layoutHeightRef.current = event.nativeEvent.layout.height;
+            updateScrollButtons(0, contentHeightRef.current, layoutHeightRef.current);
+          }}
+          onContentSizeChange={(_, height) => {
+            contentHeightRef.current = height;
+            updateScrollButtons(
+              scrollOffsetRef.current,
+              contentHeightRef.current,
+              layoutHeightRef.current
+            );
+          }}
+          scrollEventThrottle={16}
+        />
+
+        {showScrollUpBtn && (
+          <TouchableOpacity style={styles.scrollUpBtn} onPress={scrollToTop} activeOpacity={0.9}>
+            <Ionicons name="arrow-up-outline" size={16} color={colors.textWhite} />
+          </TouchableOpacity>
+        )}
+
+        {showScrollDownBtn && (
+          <TouchableOpacity style={styles.scrollDownBtn} onPress={() => scrollToLatest(true)} activeOpacity={0.9}>
+            <Ionicons name="arrow-down-outline" size={16} color={colors.textWhite} />
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={styles.floatingTaskBtn}
+          activeOpacity={0.9}
+          onPress={() => setExchangeOptionsOpen(true)}
+        >
+          <Ionicons name="list-outline" size={18} color={colors.textWhite} />
+        </TouchableOpacity>
+
+        <View style={styles.inputBar}>
+          <TouchableOpacity style={styles.attachBtn} onPress={() => {
+            setAttachmentOpen(true);
+            setAttachmentStep('chooser');
+          }}>
+            <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message…"
+            placeholderTextColor={colors.textMuted}
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={() => {
+              if (input.trim()) send();
+            }}
+            returnKeyType="send"
+            blurOnSubmit={false}
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
+            onPress={send}
+            disabled={!input.trim()}
+          >
+            <Text style={styles.sendIcon}>➤</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Modal
+          visible={attachmentOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setAttachmentOpen(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <TouchableOpacity style={styles.sheetDismissArea} activeOpacity={1} onPress={() => setAttachmentOpen(false)} />
+            <View
+              style={styles.sheet}
+              {...(attachmentStep === 'details' ? attachmentDetailPanResponder.panHandlers : {})}
+            >
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Add Photo</Text>
+              <Text style={styles.sheetSub}>
+                Add a photo or share location details so the exchange record stays clear.
+              </Text>
+
+              {attachmentStep === 'chooser' ? (
+                <View style={styles.attachmentChoiceGrid}>
+                  <TouchableOpacity
+                    style={styles.attachmentChoiceCard}
+                    onPress={() => {
+                      setAttachmentMode('photo');
+                      setAttachmentStep('details');
+                    }}
+                  >
+                    <Ionicons name="image-outline" size={22} color={colors.primary} />
+                    <Text style={styles.attachmentChoiceTitle}>Photo</Text>
+                    <Text style={styles.attachmentChoiceBody}>
+                      Add proof photos, return photos, or general images.
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.attachmentChoiceCard}
+                    onPress={() => {
+                      setAttachmentMode('location');
+                      setAttachmentStep('details');
+                    }}
+                  >
+                    <Ionicons name="location-outline" size={22} color={colors.primary} />
+                    <Text style={styles.attachmentChoiceTitle}>Location</Text>
+                    <Text style={styles.attachmentChoiceBody}>
+                      Share live location, a meet-up spot, or an on-site update.
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : attachmentMode === 'photo' ? (
+                <View style={styles.attachmentDetailWrap}>
+                  <TouchableOpacity
+                    style={styles.attachmentBackRow}
+                    onPress={() => setAttachmentStep('chooser')}
+                  >
+                    <Ionicons name="arrow-back-outline" size={16} color={colors.primary} />
+                    <Text style={styles.attachmentBackText}>Back to options</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.typeOption, selectedAttachmentSource === 'camera' && styles.typeOptionActive]}
+                    onPress={() => setSelectedAttachmentSource('camera')}
+                  >
+                    <View style={styles.typeOptionCopy}>
+                      <Text style={styles.typeOptionTitle}>Take Photo</Text>
+                      <Text style={styles.typeOptionBody}>Use the camera for a live handover, return, or evidence photo.</Text>
+                    </View>
+                    {selectedAttachmentSource === 'camera' && (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.typeOption, selectedAttachmentSource === 'library' && styles.typeOptionActive]}
+                    onPress={() => setSelectedAttachmentSource('library')}
+                  >
+                    <View style={styles.typeOptionCopy}>
+                      <Text style={styles.typeOptionTitle}>Choose from Library</Text>
+                      <Text style={styles.typeOptionBody}>Attach an existing photo that supports the current exchange.</Text>
+                    </View>
+                    {selectedAttachmentSource === 'library' && (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={styles.proofCard}>
+                    <Text style={styles.proofCardTitle}>Photo label</Text>
+                    <View style={styles.proofChips}>
+                      {ATTACHMENT_PROOF_OPTIONS.map(option => {
+                        const selected = option.id === selectedAttachmentProof;
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={[styles.proofChip, selected && styles.proofChipSelected]}
+                            onPress={() => setSelectedAttachmentProof(option.id)}
+                          >
+                            <Text style={[styles.proofChipText, selected && styles.proofChipTextSelected]}>
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.sheetActions}>
+                    <TouchableOpacity style={styles.sheetSecondaryBtn} onPress={() => setAttachmentOpen(false)}>
+                      <Text style={styles.sheetSecondaryText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.sheetPrimaryBtn} onPress={sendAttachment}>
+                      <Text style={styles.sheetPrimaryText}>Confirm</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.attachmentDetailWrap}>
+                  <TouchableOpacity
+                    style={styles.attachmentBackRow}
+                    onPress={() => setAttachmentStep('chooser')}
+                  >
+                    <Ionicons name="arrow-back-outline" size={16} color={colors.primary} />
+                    <Text style={styles.attachmentBackText}>Back to options</Text>
+                  </TouchableOpacity>
+                  <View style={styles.proofCard}>
+                    <Text style={styles.proofCardTitle}>Location share type</Text>
+                    <View style={styles.proofChips}>
+                      {LOCATION_SHARE_OPTIONS.map(option => {
+                        const selected = option.id === selectedLocationType;
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={[styles.proofChip, selected && styles.proofChipSelected]}
+                            onPress={() => setSelectedLocationType(option.id)}
+                          >
+                            <Text style={[styles.proofChipText, selected && styles.proofChipTextSelected]}>
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.locationHelpText}>
+                      Share your live location, a meet-up point, or an on-site update for the current exchange.
+                    </Text>
+                  </View>
+
+                  <View style={styles.sheetActions}>
+                    <TouchableOpacity style={styles.sheetSecondaryBtn} onPress={() => setAttachmentOpen(false)}>
+                      <Text style={styles.sheetSecondaryText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.sheetPrimaryBtn} onPress={sendAttachment}>
+                      <Text style={styles.sheetPrimaryText}>Confirm</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={pendingInviteOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPendingInviteOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setPendingInviteOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>Pending Request</Text>
+              <Text style={styles.popupBody}>
+                {otherUserName} sent a start request for this task. You can open task actions to accept or refuse it.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.dismissCheckRow}
+                activeOpacity={0.85}
+                onPress={() => setPendingInviteDismissChecked(prev => !prev)}
+              >
+                <View style={[styles.dismissCheckbox, pendingInviteDismissChecked && styles.dismissCheckboxChecked]}>
+                  {pendingInviteDismissChecked && (
+                    <Ionicons name="checkmark" size={14} color={colors.textWhite} />
+                  )}
+                </View>
+                <Text style={styles.dismissCheckText}>Do not show this reminder again for this request</Text>
+              </TouchableOpacity>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity
+                  style={styles.popupSecondaryBtn}
+                  onPress={() => {
+                    if (pendingInviteDismissChecked && exchange?.transactionId) {
+                      dismissedPendingTxRef.current.add(exchange.transactionId);
+                    }
+                    setPendingInviteOpen(false);
+                  }}
+                >
+                  <Text style={styles.popupSecondaryText}>Dismiss</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.popupSuccessBtn}
+                  onPress={() => {
+                    setPendingInviteOpen(false);
+                    setExchangeOptionsOpen(true);
+                  }}
+                >
+                  <Text style={styles.popupSuccessText}>Open Actions</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={completeConfirmOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCompleteConfirmOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setCompleteConfirmOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>
+                {exchange?.type === 'service' ? 'Mark Task Completed' : 'Complete Exchange'}
+              </Text>
+              <Text style={styles.popupBody}>
+                {exchange?.type === 'service'
+                  ? 'Please confirm the task has been completed before closing this exchange.'
+                  : 'Please confirm the item has been returned before closing this exchange.'}
+              </Text>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity style={styles.popupSecondaryBtn} onPress={() => setCompleteConfirmOpen(false)}>
+                  <Text style={styles.popupSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.popupSuccessBtn} onPress={confirmCompleteExchangeInChat}>
+                  <Text style={styles.popupSuccessText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={statusReasonOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setStatusReasonOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setStatusReasonOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>{statusReasonConfig.title}</Text>
+              <Text style={styles.popupBody}>{statusReasonConfig.body}</Text>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity style={styles.popupSuccessBtn} onPress={() => setStatusReasonOpen(false)}>
+                  <Text style={styles.popupSuccessText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={reviewPromptConfirmOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setReviewPromptConfirmOpen(false)}
+        >
+          <View style={styles.popupBackdrop}>
+            <TouchableOpacity style={styles.popupDismissArea} activeOpacity={1} onPress={() => setReviewPromptConfirmOpen(false)} />
+            <View style={styles.popupCard}>
+              <Text style={styles.popupTitle}>Leave Review</Text>
+              <Text style={styles.popupBody}>
+                This exchange is complete. Would you like to go to the exchange page and leave a review now?
+              </Text>
+
+              <View style={styles.popupActions}>
+                <TouchableOpacity style={styles.popupSecondaryBtn} onPress={() => setReviewPromptConfirmOpen(false)}>
+                  <Text style={styles.popupSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.popupSuccessBtn} onPress={openReviewPromptInTransaction}>
+                  <Text style={styles.popupSuccessText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={menuOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setMenuOpen(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <TouchableOpacity style={styles.sheetDismissArea} activeOpacity={1} onPress={() => setMenuOpen(false)} />
+            <View style={styles.sheet}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Chat Options</Text>
+              <Text style={styles.sheetSub}>
+                Manage notifications and safety actions for this conversation.
+              </Text>
+
+              <TouchableOpacity style={styles.menuRow} onPress={toggleMute}>
+                <View style={styles.menuRowLeft}>
+                  <Ionicons
+                    name={isMuted ? 'notifications-off-outline' : 'notifications-outline'}
+                    size={18}
+                    color={colors.textPrimary}
+                  />
+                  <View>
+                    <Text style={styles.menuTitle}>{isMuted ? 'Unmute' : 'Mute'}</Text>
+                    <Text style={styles.menuBody}>
+                      {isMuted ? 'Turn notifications back on for this chat.' : 'Silence notifications for this conversation.'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.menuValue}>{isMuted ? 'Muted' : ''}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.menuRow} onPress={reportUser}>
+                <View style={styles.menuRowLeft}>
+                  <Ionicons name="flag-outline" size={18} color={colors.warning} />
+                  <View>
+                    <Text style={styles.menuTitle}>Report</Text>
+                    <Text style={styles.menuBody}>Flag this user or chat for review.</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.menuRow, styles.menuRowDanger]} onPress={blockUser}>
+                <View style={styles.menuRowLeft}>
+                  <Ionicons name="hand-left-outline" size={18} color={colors.error} />
+                  <View>
+                    <Text style={[styles.menuTitle, { color: colors.error }]}>Block</Text>
+                    <Text style={styles.menuBody}>Stop this user from contacting you.</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.menuPrimaryBtn} onPress={() => setMenuOpen(false)}>
+                <View style={styles.menuPrimaryContent}>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textWhite} />
+                  <Text style={styles.menuPrimaryText}>Close Options</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={exchangeOptionsOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setExchangeOptionsOpen(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <TouchableOpacity style={styles.sheetDismissArea} activeOpacity={1} onPress={() => setExchangeOptionsOpen(false)} />
+            <View style={styles.sheet}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Task Actions</Text>
+              <Text style={styles.sheetSub}>
+                Pick the next task step from here, like pending, start, complete, or review.
+              </Text>
+
+              {exchange?.state === 'pending' && canAcceptExchange && (
+                <View style={styles.dualPendingActions}>
+                  <TouchableOpacity
+                    style={[styles.dualPendingBtn, styles.dualPendingBtnRefuse]}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setExchangeOptionsOpen(false);
+                      setTimeout(() => refusePendingExchangeInChat(), 120);
+                    }}
+                  >
+                    <Text style={styles.dualPendingRefuseText}>Refuse</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.dualPendingBtn, styles.dualPendingBtnAccept]}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setExchangeOptionsOpen(false);
+                      setTimeout(() => acceptExchangeInChat(), 120);
+                    }}
+                  >
+                    <Text style={styles.dualPendingAcceptText}>Accept</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {exchangeQuickActions.map(action => (
+                <TouchableOpacity
+                  key={action.id}
+                  style={styles.quickActionRow}
+                  activeOpacity={0.88}
+                  onPress={() => handleExchangeQuickAction(action)}
+                >
+                  <View style={styles.quickActionCopy}>
+                    <Text style={styles.quickActionTitle}>{action.label}</Text>
+                    <Text style={styles.quickActionBody}>{action.helper}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              ))}
+
+              <TouchableOpacity style={styles.menuPrimaryBtn} onPress={() => setExchangeOptionsOpen(false)}>
+                <View style={styles.menuPrimaryContent}>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textWhite} />
+                  <Text style={styles.menuPrimaryText}>Close Actions</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={statusHistoryOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setStatusHistoryOpen(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <TouchableOpacity style={styles.sheetDismissArea} activeOpacity={1} onPress={() => setStatusHistoryOpen(false)} />
+            <View style={styles.sheet}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Status Timeline</Text>
+              <Text style={styles.sheetSub}>
+                See when each exchange status started, including the current state.
+              </Text>
+
+              <ScrollView
+                style={styles.historyScroll}
+                contentContainerStyle={styles.historyList}
+                showsVerticalScrollIndicator
+                persistentScrollbar
+                nestedScrollEnabled
+              >
+                {statusHistory.length > 0 ? statusHistory.map((entry, index) => (
+                  <View key={entry.id} style={styles.historyRow}>
+                    <View style={styles.historyTrack}>
+                      <View style={styles.historyDot}>
+                        <Ionicons name={entry.icon} size={12} color={colors.primary} />
+                      </View>
+                      {index < statusHistory.length - 1 && <View style={styles.historyLine} />}
+                    </View>
+                    <View style={styles.historyContent}>
+                      <Text style={styles.historyTitle}>{entry.title}</Text>
+                      <Text style={styles.historyTime}>Started at {entry.time}</Text>
+                      <Text style={styles.historyBody}>{entry.body}</Text>
+                    </View>
+                  </View>
+                )) : (
+                  <Text style={styles.historyEmpty}>No exchange history yet.</Text>
+                )}
+              </ScrollView>
+
+              <TouchableOpacity style={styles.menuPrimaryBtn} onPress={() => setStatusHistoryOpen(false)}>
+                <View style={styles.menuPrimaryContent}>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textWhite} />
+                  <Text style={styles.menuPrimaryText}>Close Timeline</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={taskSwitcherOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setTaskSwitcherOpen(false)}
+        >
+          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setTaskSwitcherOpen(false)}>
+            <TouchableOpacity activeOpacity={1} style={styles.sheetCardWide}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Switch Task</Text>
+              <Text style={styles.sheetSubtitle}>Newest task is shown by default. You can switch back to older tasks in this chat.</Text>
+              <ScrollView style={styles.taskSwitchList} showsVerticalScrollIndicator persistentScrollbar>
+                {taskOptions.map((task, index) => {
+                  const selected = (task.postId ?? null) === (activeTaskPostId ?? null);
+                  return (
+                    <TouchableOpacity
+                      key={`${task.id}_${task.postId ?? 'none'}`}
+                      style={[styles.taskSwitchRow, selected && styles.taskSwitchRowActive]}
+                      onPress={() => {
+                        manualTaskSelectionRef.current = true;
+                        setSelectedTaskPostId(task.postId ?? null);
+                        setSelectedTaskId(task.transactionId ?? null);
+                        setTaskSwitcherOpen(false);
+                      }}
+                    >
+                      <View style={styles.taskSwitchCopy}>
+                        <View style={styles.taskSwitchTop}>
+                          <Text style={styles.taskSwitchTitle} numberOfLines={1}>{task.title}</Text>
+                          {index === 0 && <Text style={styles.taskSwitchBadge}>Latest</Text>}
+                        </View>
+                        <Text style={styles.taskSwitchMeta} numberOfLines={1}>
+                          {task.statusLabel} • {task.category}
+                        </Text>
+                      </View>
+                      {selected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => setTaskSwitcherOpen(false)}>
+                <Ionicons name="close-circle-outline" size={16} color={colors.textWhite} />
+                <Text style={styles.modalPrimaryText}>Close Tasks</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+
+        <Modal
+          visible={startExchangeOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setStartExchangeOpen(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <TouchableOpacity style={styles.sheetDismissArea} activeOpacity={1} onPress={() => setStartExchangeOpen(false)} />
+            <View style={styles.sheet}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Start Exchange</Text>
+              <Text style={styles.sheetSub}>
+                The exchange type follows the original post category when it is clear. Only ambiguous posts need a manual choice.
+              </Text>
+
+              <View style={styles.sheetSummary}>
+                <Text style={styles.sheetSummaryLabel}>Post</Text>
+                <Text style={styles.sheetSummaryValue}>{chat?.postTitle ?? 'Exchange'}</Text>
+                <Text style={styles.sheetSummaryMeta}>
+                  Provider: {previewRoles.provider.name} • Requester: {previewRoles.requester.name}
+                </Text>
+              </View>
+
+              {autoExchangeType === 'borrow' ? (
+                <View style={[styles.typeOption, styles.typeOptionActive]}>
+                  <View style={styles.typeOptionCopy}>
+                    <Text style={styles.typeOptionTitle}>Borrowed item</Text>
+                    <Text style={styles.typeOptionBody}>
+                      This post category is item-based, so the exchange is locked as a borrowed-item flow.
+                    </Text>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                </View>
+              ) : autoExchangeType === 'service' ? (
+                <View style={[styles.typeOption, styles.typeOptionActive]}>
+                  <View style={styles.typeOptionCopy}>
+                    <Text style={styles.typeOptionTitle}>Help / service</Text>
+                    <Text style={styles.typeOptionBody}>
+                      This post category is task-based, so the exchange is locked as a help/service flow.
+                    </Text>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.typeOption, draftExchangeType === 'borrow' && styles.typeOptionActive]}
+                    onPress={() => setDraftExchangeType('borrow')}
+                  >
+                    <View style={styles.typeOptionCopy}>
+                      <Text style={styles.typeOptionTitle}>Borrowed item</Text>
+                      <Text style={styles.typeOptionBody}>
+                        Use this for lending or borrowing objects. One side sends a start request first, then the other side accepts to begin the exchange.
+                      </Text>
+                    </View>
+                    {draftExchangeType === 'borrow' && (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.typeOption, draftExchangeType === 'service' && styles.typeOptionActive]}
+                    onPress={() => setDraftExchangeType('service')}
+                  >
+                    <View style={styles.typeOptionCopy}>
+                      <Text style={styles.typeOptionTitle}>Help / service</Text>
+                      <Text style={styles.typeOptionBody}>
+                        Use this for one-off help tasks. One side sends a start request first, then the other side accepts to begin the exchange.
+                      </Text>
+                    </View>
+                    {draftExchangeType === 'service' && (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <View style={styles.ruleCard}>
+                <Text style={styles.ruleTitle}>What happens next</Text>
+                <Text style={styles.ruleBody}>
+                  {(autoExchangeType ?? draftExchangeType) === 'service'
+                    ? 'The exchange will be created in pending state. Countdown begins after the other side accepts the request.'
+                    : 'The exchange will be created in pending state. Countdown begins after the other side accepts the request.'}
+                </Text>
+              </View>
+
+              <View style={styles.sheetActions}>
+                <TouchableOpacity style={styles.sheetSecondaryBtn} onPress={() => setStartExchangeOpen(false)}>
+                  <Text style={styles.sheetSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sheetPrimaryBtn} onPress={startExchange}>
+                  <Text style={styles.sheetPrimaryText}>Create Exchange</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 10,
+  },
+  backBtn: { padding: 4 },
+  backIcon: { fontSize: 22, color: colors.primary },
+  headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerUserText: { flex: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerName: { ...typography.bodyBold, color: colors.textPrimary },
+  onlineIndicator: { ...typography.caption, color: colors.supply },
+  headerSub: { ...typography.caption, color: colors.textSecondary },
+  moreIcon: { fontSize: 22, color: colors.textSecondary, padding: 4 },
+  exchangeStatusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  exchangeStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  exchangeStatusLabel: {
+    ...typography.smallBold,
+  },
+  exchangeStatusMeta: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+    textAlign: 'right',
+  },
+  stickyHeaderShell: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: colors.background,
+    zIndex: 12,
+    elevation: 12,
+  },
+  stickyHeaderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stickyHeaderMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  stickyIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickyTextWrap: {
+    flex: 1,
+  },
+  stickyTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+    marginBottom: 1,
+  },
+  stickySubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  stickyActionBtn: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  stickyRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stickyMiniBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primary + '22',
+  },
+  stickyActionText: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  stickyTaskShell: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    backgroundColor: colors.background,
+  },
+  stickyTaskPlaceholder: {
+    height: 0,
+    backgroundColor: colors.background,
+  },
+  stickyTaskCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stickyTaskMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  stickyTaskTypeChip: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  stickyTaskTypeText: {
+    ...typography.caption,
+    color: colors.primaryDark,
+    fontWeight: '700',
+  },
+  stickyTaskTextWrap: {
+    flex: 1,
+  },
+  stickyTaskTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  stickyTaskSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  stickyTaskMore: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  topStateCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginHorizontal: 12,
+    marginTop: 2,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: colors.success + '18',
+    borderWidth: 1,
+    borderColor: colors.success + '33',
+  },
+  topStateCardDispute: {
+    backgroundColor: '#f8f0fc',
+    borderColor: '#e5d5fa',
+  },
+  topStateCopy: {
+    flex: 1,
+  },
+  topStateTitle: {
+    ...typography.smallBold,
+    color: colors.success,
+    marginBottom: 3,
+  },
+  topStateBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+  },
+  pinnedArea: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: colors.background,
+  },
+  taskCard: {
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+  },
+  taskCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  taskTypeChip: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  taskTypeChipText: {
+    ...typography.caption,
+    color: colors.primaryDark,
+    fontWeight: '700',
+  },
+  taskTitle: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+    lineHeight: 22,
+  },
+  taskMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  taskMetaChip: {
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  taskMetaChipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  taskDescription: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  taskFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  taskFooterText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    flex: 1,
+  },
+  taskFooterLink: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  exchangeActionCard: {
+    marginTop: 10,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+  },
+  exchangeActionCopy: {
+    gap: 4,
+  },
+  exchangeActionTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  exchangeActionBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  floatingTaskBtn: {
+    position: 'absolute',
+    left: 14,
+    bottom: 94,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 4,
+    zIndex: 12,
+  },
+  exchangeActionHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  quickActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  quickActionCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  quickActionTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  quickActionBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  dualPendingActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  dualPendingBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  dualPendingBtnAccept: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dualPendingBtnRefuse: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+  },
+  dualPendingAcceptText: {
+    ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  dualPendingRefuseText: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  gateNotice: {
+    backgroundColor: colors.warning + '22',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.warning + '44',
+  },
+  gateText: { ...typography.small, color: '#8B6914', textAlign: 'center' },
+  messageList: { padding: 16, paddingBottom: 0, gap: 12 },
+  systemMessageWrap: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  systemMessageCard: {
+    width: '92%',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  systemMessageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  systemIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  systemHeaderText: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  systemTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  systemTime: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  systemBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 8 },
+  msgRowMe: { flexDirection: 'row-reverse' },
+  msgAvatar: { marginBottom: 2 },
+  bubble: {
+    maxWidth: '75%',
+    borderRadius: 18,
+    padding: 12,
+    gap: 4,
+  },
+  bubbleMe: {
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  bubbleThem: {
+    backgroundColor: colors.card,
+    borderBottomLeftRadius: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bubbleText: { ...typography.body, color: colors.textPrimary },
+  bubbleTextMe: { color: colors.textWhite },
+  bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+  bubbleTime: { ...typography.caption, color: colors.textMuted },
+  bubbleTimeMe: { color: 'rgba(255,255,255,0.65)' },
+  readTick: { ...typography.caption, color: 'rgba(255,255,255,0.55)' },
+  readTickRead: { color: colors.myLocation },
+  scrollUpBtn: {
+    position: 'absolute',
+    right: 14,
+    top: 248,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 4,
+    zIndex: 12,
+  },
+  scrollDownBtn: {
+    position: 'absolute',
+    right: 14,
+    bottom: 94,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 10,
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 8,
+  },
+  attachBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachIcon: { fontSize: 22 },
+  input: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    ...typography.body,
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendBtnDisabled: { backgroundColor: colors.border },
+  sendIcon: { fontSize: 16, color: colors.textWhite },
+  attachmentBubble: {
+    gap: 6,
+    minWidth: 220,
+  },
+  attachmentTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  attachmentTitle: {
+    ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  attachmentMeta: {
+    ...typography.caption,
+    color: 'rgba(255,255,255,0.78)',
+  },
+  locationBubble: {
+    gap: 6,
+    minWidth: 230,
+  },
+  locationMapPreview: {
+    marginTop: 2,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  locationMapText: {
+    ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  sheetDismissArea: {
+    flex: 1,
+  },
+  sheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 26,
+    gap: 14,
+  },
+  sheetHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+  },
+  sheetTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+  },
+  sheetSubtitle: {
+    ...typography.small,
+    color: colors.textSecondary,
+    marginTop: -6,
+    lineHeight: 19,
+  },
+  sheetSub: {
+    ...typography.small,
+    color: colors.textSecondary,
+    marginTop: -6,
+  },
+  sheetCardWide: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 26,
+    gap: 14,
+    maxHeight: '72%',
+  },
+  taskSwitchList: {
+    maxHeight: 320,
+  },
+  taskSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: colors.card,
+    marginBottom: 10,
+  },
+  taskSwitchRowActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  taskSwitchCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  taskSwitchTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  taskSwitchTitle: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  taskSwitchBadge: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  taskSwitchMeta: {
+    ...typography.small,
+    color: colors.textSecondary,
+  },
+  modalPrimaryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  modalPrimaryText: {
+    ...typography.bodyBold,
+    color: colors.textWhite,
+  },
+  sheetSummary: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+  },
+  sheetSummaryLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  sheetSummaryValue: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+    marginBottom: 3,
+  },
+  sheetSummaryMeta: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  attachmentModeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  attachmentModeChip: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: colors.card,
+  },
+  attachmentModeChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  attachmentModeChipText: {
+    ...typography.smallBold,
+    color: colors.textSecondary,
+  },
+  attachmentModeChipTextActive: {
+    color: colors.primaryDark,
+  },
+  attachmentChoiceGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  attachmentChoiceCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
+  },
+  attachmentChoiceTitle: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+  },
+  attachmentChoiceBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  attachmentDetailWrap: {
+    gap: 12,
+  },
+  attachmentBackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  attachmentBackText: {
+    ...typography.smallBold,
+    color: colors.primary,
+  },
+  typeOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: colors.card,
+  },
+  typeOptionActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  typeOptionCopy: {
+    flex: 1,
+  },
+  typeOptionTitle: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  typeOptionBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+  },
+  ruleCard: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 16,
+    padding: 14,
+  },
+  ruleTitle: {
+    ...typography.smallBold,
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  ruleBody: {
+    ...typography.small,
+    color: colors.primaryDark,
+  },
+  proofCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  proofCardTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  proofChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  proofChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  proofChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  proofChipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  proofChipTextSelected: {
+    color: colors.primaryDark,
+    fontWeight: '700',
+  },
+  locationHelpText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  historyList: {
+    gap: 14,
+    marginTop: 4,
+    marginBottom: 18,
+    paddingRight: 4,
+  },
+  historyScroll: {
+    maxHeight: 320,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  historyTrack: {
+    alignItems: 'center',
+  },
+  historyDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyLine: {
+    width: 1.5,
+    flex: 1,
+    minHeight: 26,
+    backgroundColor: colors.border,
+    marginTop: 6,
+  },
+  historyContent: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  historyTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  historyTime: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  historyBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  historyEmpty: {
+    ...typography.small,
+    color: colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  menuRowDanger: {
+    borderBottomWidth: 0,
+  },
+  menuRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    flex: 1,
+  },
+  menuTitle: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  menuBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  menuValue: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  menuPrimaryBtn: {
+    marginTop: 18,
+    borderRadius: 14,
+    minHeight: 52,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  menuPrimaryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  menuPrimaryText: {
+    ...typography.bodyBold,
+    color: colors.textWhite,
+  },
+  sheetActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  sheetSecondaryBtn: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  sheetSecondaryText: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  sheetPrimaryBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  sheetPrimaryText: {
+    ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  sheetSuccessBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.success,
+  },
+  sheetSuccessText: {
+    ...typography.smallBold,
+    color: colors.textWhite,
+  },
+  popupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  popupDismissArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  popupCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  popupTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+  },
+  popupBody: {
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  dismissCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: -2,
+  },
+  dismissCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissCheckboxChecked: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dismissCheckText: {
+    flex: 1,
+    ...typography.small,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  popupActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  popupSecondaryBtn: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  popupSecondaryText: {
+    ...typography.smallBold,
+    color: colors.textPrimary,
+  },
+  popupSuccessBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  popupSuccessText: {
+    ...typography.bodyBold,
+    color: colors.textWhite,
+  },
+});
