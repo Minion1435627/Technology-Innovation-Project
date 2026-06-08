@@ -238,10 +238,10 @@ The HelpMate mobile app is built with React Native + Expo and connects to a Supa
 
 **Quick start for testers (Expo Go — no Xcode or cable required):**
 ```bash
-git clone https://github.com/YOUR_ORG/HelpMate.git
+git clone https://github.com/Minion1435627/Technology-Innovation-Project.git
 cd HelpMate
 npm install
-npx expo start --tunnel
+npx expo start 
 ```
 Then scan the QR code with the **Expo Go** app (free — App Store or Google Play).
 
